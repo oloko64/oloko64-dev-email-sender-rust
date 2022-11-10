@@ -1,7 +1,7 @@
 use std::{env, net::SocketAddr};
 
 use actix_cors::Cors;
-use actix_web::HttpResponse;
+use actix_web::{HttpResponse, http};
 use actix_web::{post, web, App, HttpServer, Responder};
 use dotenvy::dotenv;
 use sendgrid_thin::Sendgrid;
@@ -61,7 +61,8 @@ async fn main() -> std::io::Result<()> {
 
     HttpServer::new(|| {
         let cors = Cors::default()
-            .allowed_origin("https://www.oloko64.dev/")
+            .allowed_origin("https://www.oloko64.dev")
+            .allowed_header(http::header::CONTENT_TYPE)
             .allowed_methods(vec!["GET", "POST"]);
         App::new()
             .wrap(cors)
