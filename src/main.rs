@@ -61,7 +61,7 @@ async fn main() -> std::io::Result<()> {
 
     HttpServer::new(|| {
         let cors = Cors::default()
-            .allowed_origin("https://www.oloko64.dev")
+            .allowed_origin("https://www.oloko64.dev/")
             .allowed_methods(vec!["GET", "POST"]);
         App::new()
             .wrap(cors)
