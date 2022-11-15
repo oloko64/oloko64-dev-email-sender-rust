@@ -1,5 +1,5 @@
 use actix_cors::Cors;
-use actix_web::{http, post, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{get, http, post, web, App, HttpResponse, HttpServer, Responder};
 use dotenvy::dotenv;
 use log::error;
 use sendgrid_thin::Sendgrid;
@@ -19,6 +19,11 @@ struct EmailSendResponse<'a> {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     error: Option<&'a str>,
+}
+
+#[get("/health-check")]
+async fn health_check() -> impl Responder {
+    HttpResponse::Ok().body("OK")
 }
 
 #[post("/send-mail")]
@@ -99,6 +104,7 @@ async fn main() -> std::io::Result<()> {
                 }),
             )
             .service(send_email)
+            .service(health_check)
     })
     .bind(&addr)?
     .run()
