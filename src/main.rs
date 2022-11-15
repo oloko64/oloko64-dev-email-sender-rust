@@ -48,7 +48,7 @@ async fn send_email(req_body: web::Json<EmailBody>) -> impl Responder {
             error: None,
         }),
         Err(err) => {
-            sentry::capture_error(err.as_ref());
+            sentry::capture_message(&err.to_string(), sentry::Level::Error);
             HttpResponse::BadRequest().json(EmailSendResponse {
                 message: "Error sending email",
                 error: Some(err.to_string().as_str()),

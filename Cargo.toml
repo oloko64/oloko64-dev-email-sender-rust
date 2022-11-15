@@ -16,6 +16,6 @@ derive_more = "0.99.17"
 dotenvy = "0.15.6"
 env_logger = "0.9.3"
 log = "0.4.17"
-sendgrid_thin = "0.1.6"
+sendgrid_thin = "0.1.7"
 sentry = "0.28.0"
 serde = { version = "1.0.147", features = ["derive"] }
