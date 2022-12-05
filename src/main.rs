@@ -1,5 +1,5 @@
 use actix_cors::Cors;
-use actix_web::{error, http, post, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{http, post, web, App, HttpResponse, HttpServer, Responder};
 use dotenvy::dotenv;
 use lambda_web::{is_running_on_lambda, run_actix_on_lambda, LambdaError};
 use log::{error, info, warn};
