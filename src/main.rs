@@ -36,21 +36,23 @@ async fn send_email(req_body: web::Json<EmailBody>) -> impl Responder {
         }
     };
     let Ok(from_email) = env::var("SEND_FROM_EMAIL") else {
-        error!("SEND_FROM_EMAIL not found or set in environment variables");
-        sentry::capture_message("Send from email not found", sentry::Level::Error);
+        let error_message = "SEND_FROM_EMAIL not found or set in environment variables";
+        error!("{}", error_message);
+        sentry::capture_message(error_message, sentry::Level::Error);
         return HttpResponse::InternalServerError().json(EmailSendResponse {
             message: "Internal Server Error",
             success: false,
-            error: Some("SEND_FROM_EMAIL not found or set in environment variables"),
+            error: Some(error_message),
         });
     };
     let Ok(to_email) = env::var("SEND_TO_EMAIL") else {
-        error!("SEND_TO_EMAIL not found or set in environment variables");
-        sentry::capture_message("Send to email not found", sentry::Level::Error);
+        let error_message = "SEND_TO_EMAIL not found or set in environment variables";
+        error!("{}", error_message);
+        sentry::capture_message(error_message, sentry::Level::Error);
         return HttpResponse::InternalServerError().json(EmailSendResponse {
             message: "Internal Server Error",
             success: false,
-            error: Some("SEND_TO_EMAIL not found or set in environment variables"),
+            error: Some(error_message),
         });
     };
     let mut sendgrid = Sendgrid::new(&sendgrid_api_key);
