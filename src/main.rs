@@ -1,6 +1,7 @@
 use actix_cors::Cors;
 use actix_web::{http, post, web, App, HttpResponse, HttpServer, Responder};
 use dotenvy::dotenv;
+use lambda_web::{is_running_on_lambda, run_actix_on_lambda, LambdaError};
 use log::error;
 use sendgrid_thin::Sendgrid;
 use serde::{Deserialize, Serialize};
@@ -59,7 +60,7 @@ async fn send_email(req_body: web::Json<EmailBody>) -> impl Responder {
 }
 
 #[actix_web::main]
-async fn main() -> std::io::Result<()> {
+async fn main() -> Result<(), LambdaError> {
     dotenv().ok();
     env_logger::init();
     let sentry_api_key = env::var("SENTRY_API_KEY").unwrap_or_else(|_| {
@@ -85,13 +86,14 @@ async fn main() -> std::io::Result<()> {
             .expect("Failed to parse port from .env file"),
     ));
 
-    HttpServer::new(|| {
-        let cors = Cors::default()
-            .allowed_origin("https://www.oloko64.dev")
-            .allowed_header(http::header::CONTENT_TYPE)
-            .allowed_methods(vec!["GET", "POST"]);
+    let factory = move || {
         App::new()
-            .wrap(cors)
+            .wrap(
+                Cors::default()
+                    .allowed_origin("https://www.oloko64.dev")
+                    .allowed_header(http::header::CONTENT_TYPE)
+                    .allowed_methods(vec!["GET", "POST"]),
+            )
             .route(
                 "/",
                 web::get().to(|| async {
@@ -99,8 +101,15 @@ async fn main() -> std::io::Result<()> {
                 }),
             )
             .service(send_email)
-    })
-    .bind(&addr)?
-    .run()
-    .await
+    };
+
+    if is_running_on_lambda() {
+        // Run on AWS Lambda
+        run_actix_on_lambda(factory).await?;
+    } else {
+        // Run on a normal HTTP server
+        HttpServer::new(factory).bind(&addr)?.run().await?;
+    }
+
+    Ok(())
 }
