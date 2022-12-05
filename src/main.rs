@@ -1,5 +1,5 @@
 use actix_cors::Cors;
-use actix_web::{http, post, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{error, http, post, web, App, HttpResponse, HttpServer, Responder};
 use dotenvy::dotenv;
 use lambda_web::{is_running_on_lambda, run_actix_on_lambda, LambdaError};
 use log::{error, info, warn};
@@ -24,19 +24,18 @@ struct EmailSendResponse<'a> {
 
 #[post("/send-mail")]
 async fn send_email(req_body: web::Json<EmailBody>) -> impl Responder {
-    let sendgrid_api_key = match env::var("SENDGRID_API_KEY") {
-        Ok(api_key) => api_key,
-        Err(err) => {
-            sentry::capture_error(&err);
-            return HttpResponse::InternalServerError().json(EmailSendResponse {
-                message: "Internal Server Error",
-                success: false,
-                error: Some("Sendgrid API Key not found"),
-            });
-        }
+    let Ok(sendgrid_api_key) = env::var("SENDGRID_API_KEY") else {
+        let error_message = "SENDGRID_API_KEY not set";
+        error!("{}", error_message);
+        sentry::capture_message(error_message, sentry::Level::Error);
+        return HttpResponse::InternalServerError().json(EmailSendResponse {
+            message: "Internal Server Error",
+            success: false,
+            error: Some(error_message),
+        });
     };
     let Ok(from_email) = env::var("SEND_FROM_EMAIL") else {
-        let error_message = "SEND_FROM_EMAIL not found or set in environment variables";
+        let error_message = "SEND_FROM_EMAIL not set";
         error!("{}", error_message);
         sentry::capture_message(error_message, sentry::Level::Error);
         return HttpResponse::InternalServerError().json(EmailSendResponse {
@@ -46,7 +45,7 @@ async fn send_email(req_body: web::Json<EmailBody>) -> impl Responder {
         });
     };
     let Ok(to_email) = env::var("SEND_TO_EMAIL") else {
-        let error_message = "SEND_TO_EMAIL not found or set in environment variables";
+        let error_message = "SEND_TO_EMAIL not set";
         error!("{}", error_message);
         sentry::capture_message(error_message, sentry::Level::Error);
         return HttpResponse::InternalServerError().json(EmailSendResponse {
