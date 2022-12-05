@@ -19,6 +19,6 @@ dotenvy = "0.15.6"
 env_logger = "0.10.0"
 lambda-web = { version = "0.2.0", features = ["actix4"] }
 log = "0.4.17"
-sendgrid_thin = "0.1.8"
+sendgrid_thin = "0.1.9"
 sentry = "0.29.1"
 serde = { version = "1.0.149", features = ["derive"] }

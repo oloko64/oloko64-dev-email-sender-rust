@@ -2,7 +2,7 @@ use actix_cors::Cors;
 use actix_web::{http, post, web, App, HttpResponse, HttpServer, Responder};
 use dotenvy::dotenv;
 use lambda_web::{is_running_on_lambda, run_actix_on_lambda, LambdaError};
-use log::{info, warn};
+use log::{error, info, warn};
 use sendgrid_thin::Sendgrid;
 use serde::{Deserialize, Serialize};
 use std::{env, net::SocketAddr};
@@ -35,10 +35,28 @@ async fn send_email(req_body: web::Json<EmailBody>) -> impl Responder {
             });
         }
     };
+    let Ok(from_email) = env::var("SEND_FROM_EMAIL") else {
+        error!("SEND_FROM_EMAIL not found or set in environment variables");
+        sentry::capture_message("Send from email not found", sentry::Level::Error);
+        return HttpResponse::InternalServerError().json(EmailSendResponse {
+            message: "Internal Server Error",
+            success: false,
+            error: Some("SEND_FROM_EMAIL not found or set in environment variables"),
+        });
+    };
+    let Ok(to_email) = env::var("SEND_TO_EMAIL") else {
+        error!("SEND_TO_EMAIL not found or set in environment variables");
+        sentry::capture_message("Send to email not found", sentry::Level::Error);
+        return HttpResponse::InternalServerError().json(EmailSendResponse {
+            message: "Internal Server Error",
+            success: false,
+            error: Some("SEND_TO_EMAIL not found or set in environment variables"),
+        });
+    };
     let mut sendgrid = Sendgrid::new(&sendgrid_api_key);
     sendgrid
-        .set_from_email("reinaldorozatoj.11cg1@aleeas.com")
-        .set_to_emails(&["reinaldorozatoj@gmail.com"])
+        .set_from_email(from_email)
+        .set_to_emails([to_email])
         .set_subject(&req_body.subject)
         .set_body(&req_body.body);
 
