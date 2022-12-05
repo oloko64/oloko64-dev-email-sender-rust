@@ -11,6 +11,8 @@ strip = true
 codegen-units = 1
 
 [dependencies]
+# This openssl with "vendored" is necessary because the default OpenSSL library is not built for the target architecture (x86_64-unknown-linux-musl)
+openssl = { version = "0.10.43", features = ["vendored"] }
 actix-cors = "0.6.4"
 actix-web = "4.2.1"
 dotenvy = "0.15.6"

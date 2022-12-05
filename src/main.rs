@@ -2,7 +2,7 @@ use actix_cors::Cors;
 use actix_web::{http, post, web, App, HttpResponse, HttpServer, Responder};
 use dotenvy::dotenv;
 use lambda_web::{is_running_on_lambda, run_actix_on_lambda, LambdaError};
-use log::error;
+use log::{info, warn};
 use sendgrid_thin::Sendgrid;
 use serde::{Deserialize, Serialize};
 use std::{env, net::SocketAddr};
@@ -43,11 +43,17 @@ async fn send_email(req_body: web::Json<EmailBody>) -> impl Responder {
         .set_body(&req_body.body);
 
     match sendgrid.send() {
-        Ok(message) => HttpResponse::Ok().json(EmailSendResponse {
-            message: &message,
-            success: true,
-            error: None,
-        }),
+        Ok(message) => {
+            info!(
+                "Message sent: {:?} | subject: {}",
+                message, req_body.subject
+            );
+            HttpResponse::Ok().json(EmailSendResponse {
+                message: &message,
+                success: true,
+                error: None,
+            })
+        }
         Err(err) => {
             sentry::capture_message(&err.to_string(), sentry::Level::Error);
             HttpResponse::BadRequest().json(EmailSendResponse {
@@ -64,7 +70,7 @@ async fn main() -> Result<(), LambdaError> {
     dotenv().ok();
     env_logger::init();
     let sentry_api_key = env::var("SENTRY_API_KEY").unwrap_or_else(|_| {
-        error!("Sentry API Key not found");
+        warn!("Sentry API Key not found, not reporting errors to Sentry");
         String::new()
     });
     let _guard = sentry::init((
@@ -79,7 +85,7 @@ async fn main() -> Result<(), LambdaError> {
         [0, 0, 0, 0],
         env::var("PORT")
             .unwrap_or_else(|_| {
-                println!("PORT not found .env file, using default port: 8080");
+                warn!("PORT not found .env file, using default port: 8080");
                 "8080".to_owned()
             })
             .parse::<u16>()
