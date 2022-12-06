@@ -5,7 +5,13 @@ use lambda_web::{is_running_on_lambda, run_actix_on_lambda, LambdaError};
 use log::{error, info, warn};
 use sendgrid_thin::Sendgrid;
 use serde::{Deserialize, Serialize};
-use std::{env, net::SocketAddr};
+use std::{
+    env::{self, VarError},
+    net::SocketAddr,
+};
+use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+
+const DEFAULT_PORT: u16 = 8080;
 
 #[derive(Deserialize)]
 struct EmailBody {
@@ -22,38 +28,63 @@ struct EmailSendResponse<'a> {
     error: Option<&'a str>,
 }
 
+fn get_env_variable(
+    var: Result<String, VarError>,
+    error_message: &str,
+) -> Result<String, HttpResponse> {
+    match var {
+        Ok(value) => Ok(value),
+        Err(_) => {
+            error!("{}", error_message);
+            sentry::capture_message(error_message, sentry::Level::Error);
+            Err(HttpResponse::InternalServerError().json(EmailSendResponse {
+                message: "Internal Server Error",
+                success: false,
+                error: Some(error_message),
+            }))
+        }
+    }
+}
+
+fn get_socket_addr() -> SocketAddr {
+    SocketAddr::from((
+        [0, 0, 0, 0],
+        env::var("PORT")
+            .unwrap_or_else(|_| {
+                warn!(
+                    "PORT not found .env file, using default port: {}",
+                    DEFAULT_PORT
+                );
+                DEFAULT_PORT.to_string()
+            })
+            .parse::<u16>()
+            .unwrap_or_else(|_| {
+                warn!(
+                    "PORT is not a valid port number, using default port: {}",
+                    DEFAULT_PORT
+                );
+                DEFAULT_PORT
+            }),
+    ))
+}
+
 #[post("/send-mail")]
 async fn send_email(req_body: web::Json<EmailBody>) -> impl Responder {
-    let Ok(sendgrid_api_key) = env::var("SENDGRID_API_KEY") else {
-        let error_message = "SENDGRID_API_KEY not set";
-        error!("{}", error_message);
-        sentry::capture_message(error_message, sentry::Level::Error);
-        return HttpResponse::InternalServerError().json(EmailSendResponse {
-            message: "Internal Server Error",
-            success: false,
-            error: Some(error_message),
-        });
+    let sendgrid_api_key =
+        match get_env_variable(env::var("SENDGRID_API_KEY"), "SENDGRID_API_KEY not set") {
+            Ok(value) => value,
+            Err(http_response) => return http_response,
+        };
+    let from_email = match get_env_variable(env::var("SEND_FROM_EMAIL"), "SEND_FROM_EMAIL not set")
+    {
+        Ok(value) => value,
+        Err(http_response) => return http_response,
     };
-    let Ok(from_email) = env::var("SEND_FROM_EMAIL") else {
-        let error_message = "SEND_FROM_EMAIL not set";
-        error!("{}", error_message);
-        sentry::capture_message(error_message, sentry::Level::Error);
-        return HttpResponse::InternalServerError().json(EmailSendResponse {
-            message: "Internal Server Error",
-            success: false,
-            error: Some(error_message),
-        });
+    let to_email = match get_env_variable(env::var("SEND_TO_EMAIL"), "SEND_TO_EMAIL not set") {
+        Ok(value) => value,
+        Err(http_response) => return http_response,
     };
-    let Ok(to_email) = env::var("SEND_TO_EMAIL") else {
-        let error_message = "SEND_TO_EMAIL not set";
-        error!("{}", error_message);
-        sentry::capture_message(error_message, sentry::Level::Error);
-        return HttpResponse::InternalServerError().json(EmailSendResponse {
-            message: "Internal Server Error",
-            success: false,
-            error: Some(error_message),
-        });
-    };
+
     let mut sendgrid = Sendgrid::new(&sendgrid_api_key);
     sendgrid
         .set_from_email(from_email)
@@ -86,8 +117,11 @@ async fn send_email(req_body: web::Json<EmailBody>) -> impl Responder {
 
 #[actix_web::main]
 async fn main() -> Result<(), LambdaError> {
+    tracing_subscriber::registry()
+        .with(fmt::layer())
+        .with(EnvFilter::from_default_env())
+        .init();
     dotenv().ok();
-    env_logger::init();
     let sentry_api_key = env::var("SENTRY_API_KEY").unwrap_or_else(|_| {
         warn!("Sentry API Key not found, not reporting errors to Sentry");
         String::new()
@@ -98,17 +132,6 @@ async fn main() -> Result<(), LambdaError> {
             release: sentry::release_name!(),
             ..Default::default()
         },
-    ));
-
-    let addr = SocketAddr::from((
-        [0, 0, 0, 0],
-        env::var("PORT")
-            .unwrap_or_else(|_| {
-                warn!("PORT not found .env file, using default port: 8080");
-                "8080".to_owned()
-            })
-            .parse::<u16>()
-            .expect("Failed to parse port from .env file"),
     ));
 
     let factory = move || {
@@ -133,7 +156,10 @@ async fn main() -> Result<(), LambdaError> {
         run_actix_on_lambda(factory).await?;
     } else {
         // Run on a normal HTTP server
-        HttpServer::new(factory).bind(&addr)?.run().await?;
+        HttpServer::new(factory)
+            .bind(&get_socket_addr())?
+            .run()
+            .await?;
     }
 
     Ok(())

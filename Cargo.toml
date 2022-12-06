@@ -1,6 +1,6 @@
 [package]
 name = "email-sender-rust"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -16,9 +16,9 @@ openssl = { version = "0.10.43", features = ["vendored"] }
 actix-cors = "0.6.4"
 actix-web = "4.2.1"
 dotenvy = "0.15.6"
-env_logger = "0.10.0"
 lambda-web = { version = "0.2.0", features = ["actix4"] }
 log = "0.4.17"
 sendgrid_thin = "0.1.9"
 sentry = "0.29.1"
 serde = { version = "1.0.149", features = ["derive"] }
+tracing-subscriber = { version = "0.3.16", features = ["env-filter"] }
