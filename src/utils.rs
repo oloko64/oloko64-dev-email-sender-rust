@@ -29,16 +29,15 @@ impl EnvVars {
         var: Result<String, VarError>,
         error_message: &str,
     ) -> Result<String, HttpResponse> {
-        match var {
-            Ok(value) => Ok(value),
-            Err(_) => {
-                error!("{}", error_message);
-                sentry::capture_message(error_message, sentry::Level::Error);
-                Err(EmailSendResponse::internal_server_error(
-                    "Internal Server Error",
-                    Some(error_message),
-                ))
-            }
+        if let Ok(value) = var {
+            Ok(value)
+        } else {
+            error!("{}", error_message);
+            sentry::capture_message(error_message, sentry::Level::Error);
+            Err(EmailSendResponse::internal_server_error(
+                "Internal Server Error",
+                Some(error_message),
+            ))
         }
     }
 }

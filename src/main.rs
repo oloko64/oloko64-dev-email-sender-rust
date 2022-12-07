@@ -94,6 +94,8 @@ async fn main() -> Result<(), LambdaError> {
             .service(send_email)
     };
 
+    info!("App version: v{}", env!("CARGO_PKG_VERSION"));
+
     if is_running_on_lambda() {
         // Run on AWS Lambda
         run_actix_on_lambda(factory).await?;
