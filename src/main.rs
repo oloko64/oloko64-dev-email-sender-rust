@@ -118,7 +118,7 @@ async fn send_email(req_body: web::Json<EmailBody>) -> impl Responder {
 #[actix_web::main]
 async fn main() -> Result<(), LambdaError> {
     tracing_subscriber::registry()
-        .with(fmt::layer())
+        .with(fmt::layer().with_ansi(false))
         .with(EnvFilter::from_default_env())
         .init();
     dotenv().ok();
