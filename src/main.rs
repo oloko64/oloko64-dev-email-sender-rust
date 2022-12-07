@@ -1,71 +1,24 @@
+mod responses;
+mod utils;
+
+use std::env;
+
 use actix_cors::Cors;
-use actix_web::{http, post, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{http, post, web, App, HttpServer, Responder};
 use dotenvy::dotenv;
 use lambda_web::{is_running_on_lambda, run_actix_on_lambda, LambdaError};
-use log::{error, info, warn};
+use log::{info, warn};
 use sendgrid_thin::Sendgrid;
-use serde::{Deserialize, Serialize};
-use std::{
-    env::{self, VarError},
-    net::SocketAddr,
-};
+use serde::Deserialize;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+use utils::{get_env_variable, get_socket_addr};
 
-const DEFAULT_PORT: u16 = 8080;
+use crate::responses::EmailSendResponse;
 
 #[derive(Deserialize)]
 struct EmailBody {
     subject: String,
     body: String,
-}
-
-#[derive(Serialize)]
-struct EmailSendResponse<'a> {
-    message: &'a str,
-    success: bool,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    error: Option<&'a str>,
-}
-
-fn get_env_variable(
-    var: Result<String, VarError>,
-    error_message: &str,
-) -> Result<String, HttpResponse> {
-    match var {
-        Ok(value) => Ok(value),
-        Err(_) => {
-            error!("{}", error_message);
-            sentry::capture_message(error_message, sentry::Level::Error);
-            Err(HttpResponse::InternalServerError().json(EmailSendResponse {
-                message: "Internal Server Error",
-                success: false,
-                error: Some(error_message),
-            }))
-        }
-    }
-}
-
-fn get_socket_addr() -> SocketAddr {
-    SocketAddr::from((
-        [0, 0, 0, 0],
-        env::var("PORT")
-            .unwrap_or_else(|_| {
-                warn!(
-                    "PORT not found .env file, using default port: {}",
-                    DEFAULT_PORT
-                );
-                DEFAULT_PORT.to_string()
-            })
-            .parse::<u16>()
-            .unwrap_or_else(|_| {
-                warn!(
-                    "PORT is not a valid port number, using default port: {}",
-                    DEFAULT_PORT
-                );
-                DEFAULT_PORT
-            }),
-    ))
 }
 
 #[post("/send-mail")]
@@ -85,7 +38,7 @@ async fn send_email(req_body: web::Json<EmailBody>) -> impl Responder {
         Err(http_response) => return http_response,
     };
 
-    let mut sendgrid = Sendgrid::new(&sendgrid_api_key);
+    let mut sendgrid = Sendgrid::new(sendgrid_api_key);
     sendgrid
         .set_from_email(from_email)
         .set_to_emails([to_email])
@@ -98,19 +51,11 @@ async fn send_email(req_body: web::Json<EmailBody>) -> impl Responder {
                 "Message sent: {:?} | subject: {}",
                 message, req_body.subject
             );
-            HttpResponse::Ok().json(EmailSendResponse {
-                message: &message,
-                success: true,
-                error: None,
-            })
+            EmailSendResponse::ok(&message)
         }
         Err(err) => {
             sentry::capture_message(&err.to_string(), sentry::Level::Error);
-            HttpResponse::BadRequest().json(EmailSendResponse {
-                message: "Error sending email",
-                error: Some(err.to_string().as_str()),
-                success: false,
-            })
+            EmailSendResponse::bad_request("Error Sending Email", Some(&err.to_string()))
         }
     }
 }
