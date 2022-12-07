@@ -11,7 +11,7 @@ use log::{info, warn};
 use sendgrid_thin::Sendgrid;
 use serde::Deserialize;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
-use utils::{get_env_variable, get_socket_addr};
+use utils::{get_socket_addr, EnvVars};
 
 use crate::responses::EmailSendResponse;
 
@@ -23,17 +23,15 @@ struct EmailBody {
 
 #[post("/send-mail")]
 async fn send_email(req_body: web::Json<EmailBody>) -> impl Responder {
-    let sendgrid_api_key =
-        match get_env_variable(env::var("SENDGRID_API_KEY"), "SENDGRID_API_KEY not set") {
-            Ok(value) => value,
-            Err(http_response) => return http_response,
-        };
-    let from_email = match get_env_variable(env::var("SEND_FROM_EMAIL"), "SEND_FROM_EMAIL not set")
-    {
+    let sendgrid_api_key = match EnvVars::get_sendgrid_api_key() {
         Ok(value) => value,
         Err(http_response) => return http_response,
     };
-    let to_email = match get_env_variable(env::var("SEND_TO_EMAIL"), "SEND_TO_EMAIL not set") {
+    let from_email = match EnvVars::get_send_from_email() {
+        Ok(value) => value,
+        Err(http_response) => return http_response,
+    };
+    let to_email = match EnvVars::get_send_to_email() {
         Ok(value) => value,
         Err(http_response) => return http_response,
     };

@@ -10,19 +10,35 @@ use crate::responses::EmailSendResponse;
 
 const DEFAULT_PORT: u16 = 8080;
 
-pub fn get_env_variable(
-    var: Result<String, VarError>,
-    error_message: &str,
-) -> Result<String, HttpResponse> {
-    match var {
-        Ok(value) => Ok(value),
-        Err(_) => {
-            error!("{}", error_message);
-            sentry::capture_message(error_message, sentry::Level::Error);
-            Err(EmailSendResponse::internal_server_error(
-                "Internal Server Error",
-                Some(error_message),
-            ))
+pub struct EnvVars {}
+
+impl EnvVars {
+    pub fn get_sendgrid_api_key() -> Result<String, HttpResponse> {
+        Self::get_env_variable(env::var("SENDGRID_API_KEY"), "SENDGRID_API_KEY not set")
+    }
+
+    pub fn get_send_from_email() -> Result<String, HttpResponse> {
+        Self::get_env_variable(env::var("SEND_FROM_EMAIL"), "SEND_FROM_EMAIL not set")
+    }
+
+    pub fn get_send_to_email() -> Result<String, HttpResponse> {
+        Self::get_env_variable(env::var("SEND_TO_EMAIL"), "SEND_TO_EMAIL not set")
+    }
+
+    pub fn get_env_variable(
+        var: Result<String, VarError>,
+        error_message: &str,
+    ) -> Result<String, HttpResponse> {
+        match var {
+            Ok(value) => Ok(value),
+            Err(_) => {
+                error!("{}", error_message);
+                sentry::capture_message(error_message, sentry::Level::Error);
+                Err(EmailSendResponse::internal_server_error(
+                    "Internal Server Error",
+                    Some(error_message),
+                ))
+            }
         }
     }
 }
