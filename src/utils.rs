@@ -1,7 +1,4 @@
-use std::{
-    env::{self, VarError},
-    net::SocketAddr,
-};
+use std::{env, net::SocketAddr};
 
 use actix_web::HttpResponse;
 use log::{error, warn};
@@ -14,22 +11,22 @@ pub struct EnvVars {}
 
 impl EnvVars {
     pub fn get_sendgrid_api_key() -> Result<String, HttpResponse> {
-        Self::get_env_variable(env::var("SENDGRID_API_KEY"), "SENDGRID_API_KEY not set")
+        Self::get_env_variable("SENDGRID_API_KEY", "SENDGRID_API_KEY not set")
     }
 
     pub fn get_send_from_email() -> Result<String, HttpResponse> {
-        Self::get_env_variable(env::var("SEND_FROM_EMAIL"), "SEND_FROM_EMAIL not set")
+        Self::get_env_variable("SEND_FROM_EMAIL", "SEND_FROM_EMAIL not set")
     }
 
     pub fn get_send_to_email() -> Result<String, HttpResponse> {
-        Self::get_env_variable(env::var("SEND_TO_EMAIL"), "SEND_TO_EMAIL not set")
+        Self::get_env_variable("SEND_TO_EMAIL", "SEND_TO_EMAIL not set")
     }
 
     pub fn get_env_variable(
-        var: Result<String, VarError>,
+        env_variable: &str,
         error_message: &str,
     ) -> Result<String, HttpResponse> {
-        if let Ok(value) = var {
+        if let Ok(value) = env::var(env_variable) {
             Ok(value)
         } else {
             error!("{}", error_message);
