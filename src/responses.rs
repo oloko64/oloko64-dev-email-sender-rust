@@ -1,17 +1,25 @@
 use actix_web::HttpResponse;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Serialize)]
-pub struct EmailSendResponse<'a> {
-    message: &'a str,
+#[cfg_attr(test, derive(Deserialize, Debug, PartialEq, Eq))]
+pub struct EmailSendResponse {
+    message: String,
     success: bool,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    error: Option<&'a str>,
+    error: Option<String>,
 }
 
-impl<'a> EmailSendResponse<'a> {
-    pub fn ok(message: &'a str) -> HttpResponse {
+impl EmailSendResponse {
+    pub(crate) fn new(message: String, success: bool, error: Option<String>) -> Self {
+        Self {
+            message,
+            success,
+            error,
+        }
+    }
+    pub fn ok(message: String) -> HttpResponse {
         HttpResponse::Ok().json(Self {
             message,
             success: true,
@@ -19,19 +27,25 @@ impl<'a> EmailSendResponse<'a> {
         })
     }
 
-    pub fn internal_server_error(message: &'a str, error: Option<&'a str>) -> HttpResponse {
+    pub fn internal_server_error<T>(message: T, error: Option<T>) -> HttpResponse
+    where
+        T: Into<String>,
+    {
         HttpResponse::InternalServerError().json(Self {
-            message,
+            message: message.into(),
             success: false,
-            error,
+            error: error.map(|e| e.into()),
         })
     }
 
-    pub fn bad_request(message: &'a str, error: Option<&'a str>) -> HttpResponse {
+    pub fn bad_request<T>(message: T, error: Option<T>) -> HttpResponse
+    where
+        T: Into<String>,
+    {
         HttpResponse::BadRequest().json(Self {
-            message,
+            message: message.into(),
             success: false,
-            error,
+            error: error.map(|e| e.into()),
         })
     }
 }

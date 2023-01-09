@@ -12,13 +12,13 @@ codegen-units = 1
 
 [dependencies]
 # This openssl with "vendored" is necessary because the default OpenSSL library is not built for the target architecture (x86_64-unknown-linux-musl)
-openssl = { version = "0.10.43", features = ["vendored"] }
+openssl = { version = "0.10.45", features = ["vendored"] }
 actix-cors = "0.6.4"
 actix-web = "4.2.1"
 dotenvy = "0.15.6"
-lambda-web = { version = "0.2.0", features = ["actix4"] }
+lambda-web = { version = "0.2.1", features = ["actix4"] }
 log = "0.4.17"
 sendgrid_thin = "0.1.9"
 sentry = "0.29.1"
-serde = { version = "1.0.149", features = ["derive"] }
+serde = { version = "1.0.152", features = ["derive"] }
 tracing-subscriber = { version = "0.3.16", features = ["env-filter"] }

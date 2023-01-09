@@ -49,7 +49,7 @@ async fn send_email(req_body: web::Json<EmailBody>) -> impl Responder {
                 "Message sent: {:?} | subject: {}",
                 message, req_body.subject
             );
-            EmailSendResponse::ok(&message)
+            EmailSendResponse::ok(message)
         }
         Err(err) => {
             sentry::capture_message(&err.to_string(), sentry::Level::Error);
@@ -61,7 +61,7 @@ async fn send_email(req_body: web::Json<EmailBody>) -> impl Responder {
 #[actix_web::main]
 async fn main() -> Result<(), LambdaError> {
     tracing_subscriber::registry()
-        .with(fmt::layer().with_ansi(false))
+        .with(fmt::layer().with_ansi(true))
         .with(EnvFilter::from_default_env())
         .init();
     dotenv().ok();
@@ -108,4 +108,31 @@ async fn main() -> Result<(), LambdaError> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use actix_web::{test, App};
+
+    use super::*;
+
+    #[actix_web::test]
+    async fn sendgrid_api_key_not_set() {
+        let app = test::init_service(App::new().service(send_email)).await;
+        let req = test::TestRequest::post()
+            .uri("/send-mail")
+            .set_payload(r#"{"subject": "Test Subject", "body": "Test Body"}"#)
+            .append_header(("content-type", "application/json"))
+            .to_request();
+        let resp: EmailSendResponse = test::call_and_read_body_json(&app, req).await;
+
+        assert_eq!(
+            resp,
+            EmailSendResponse::new(
+                "Internal Server Error".to_owned(),
+                false,
+                Some("SENDGRID_API_KEY not set".to_owned())
+            )
+        );
+    }
 }
