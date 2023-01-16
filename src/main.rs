@@ -4,7 +4,7 @@ mod utils;
 use std::env;
 
 use actix_cors::Cors;
-use actix_web::{http, post, web, App, HttpServer, Responder};
+use actix_web::{http, post, web, App, HttpServer, Responder, Result};
 use dotenvy::dotenv;
 use lambda_web::{is_running_on_lambda, run_actix_on_lambda, LambdaError};
 use log::{info, warn};
@@ -13,7 +13,7 @@ use serde::Deserialize;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 use utils::{get_socket_addr, EnvVars};
 
-use crate::responses::EmailSendResponse;
+use crate::responses::{EmailSendResponse, UserError};
 
 #[derive(Deserialize)]
 struct EmailBody {
@@ -22,19 +22,10 @@ struct EmailBody {
 }
 
 #[post("/send-mail")]
-async fn send_email(req_body: web::Json<EmailBody>) -> impl Responder {
-    let sendgrid_api_key = match EnvVars::get_sendgrid_api_key() {
-        Ok(value) => value,
-        Err(http_response) => return http_response,
-    };
-    let from_email = match EnvVars::get_send_from_email() {
-        Ok(value) => value,
-        Err(http_response) => return http_response,
-    };
-    let to_email = match EnvVars::get_send_to_email() {
-        Ok(value) => value,
-        Err(http_response) => return http_response,
-    };
+async fn send_email(req_body: web::Json<EmailBody>) -> Result<impl Responder, UserError> {
+    let sendgrid_api_key = EnvVars::get_sendgrid_api_key()?;
+    let from_email = EnvVars::get_send_from_email()?;
+    let to_email = EnvVars::get_send_to_email()?;
 
     let mut sendgrid = Sendgrid::new(sendgrid_api_key);
     sendgrid
@@ -49,11 +40,13 @@ async fn send_email(req_body: web::Json<EmailBody>) -> impl Responder {
                 "Message sent: {:?} | subject: {}",
                 message, req_body.subject
             );
-            EmailSendResponse::ok(&message)
+            Ok(EmailSendResponse::ok(message))
         }
         Err(err) => {
             sentry::capture_message(&err.to_string(), sentry::Level::Error);
-            EmailSendResponse::bad_request("Error Sending Email", Some(&err.to_string()))
+            Err(UserError::InternalServerError {
+                body: EmailSendResponse::error(&err.to_string(), Some(&err.to_string())),
+            })
         }
     }
 }
