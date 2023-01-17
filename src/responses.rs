@@ -5,10 +5,10 @@ use actix_web::{
     http::{header::ContentType, StatusCode},
     HttpResponse,
 };
-use derive_more::{Display, Error};
+use derive_more::Display;
 use serde::Serialize;
 
-#[derive(Debug, Display, Error)]
+#[derive(Debug, Display)]
 pub enum UserError {
     #[display(fmt = "{body}")]
     BadRequest { body: EmailSendResponse },
@@ -59,9 +59,10 @@ impl EmailSendResponse {
         })
     }
 
-    pub fn error<T>(message: T, error: Option<T>) -> Self
+    pub fn error<T, U>(message: T, error: Option<U>) -> Self
     where
         T: Into<String>,
+        U: Into<String>,
     {
         Self {
             message: message.into(),
