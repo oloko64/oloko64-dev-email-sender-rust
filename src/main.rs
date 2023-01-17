@@ -1,8 +1,6 @@
 mod responses;
 mod utils;
 
-use std::env::{self, set_var};
-
 use actix_cors::Cors;
 use actix_web::{http, middleware::Logger, post, web, App, HttpServer, Responder, Result};
 use dotenvy::dotenv;
@@ -10,6 +8,7 @@ use lambda_web::{is_running_on_lambda, run_actix_on_lambda, LambdaError};
 use log::{info, warn};
 use sendgrid_thin::Sendgrid;
 use serde::Deserialize;
+use std::env::{self, set_var};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 use utils::{get_socket_addr, EnvVars};
 
