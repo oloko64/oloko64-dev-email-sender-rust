@@ -34,11 +34,11 @@ async fn send_email(req_body: web::Json<EmailBody>) -> Result<impl Responder, Us
         .set_subject(&req_body.subject)
         .set_body(&req_body.body);
 
-    let response_message = sendgrid.send().map_err(|err| {
-        UserError::InternalServerError {
+    let response_message = sendgrid
+        .send()
+        .map_err(|err| UserError::InternalServerError {
             body: EmailSendResponse::error(err.to_string(), Some("Error sending email")),
-        }
-    })?;
+        })?;
 
     info!(
         "Message sent: {} | subject: {}",
@@ -50,7 +50,6 @@ async fn send_email(req_body: web::Json<EmailBody>) -> Result<impl Responder, Us
 #[actix_web::main]
 async fn main() -> Result<(), LambdaError> {
     set_var("RUST_LOG", "info");
-    set_var("RUST_BACKTRACE", "1");
 
     tracing_subscriber::registry()
         .with(fmt::layer().with_ansi(false))
@@ -102,4 +101,29 @@ async fn main() -> Result<(), LambdaError> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use actix_web::{http::header, test, App};
+
+    #[actix_web::test]
+    async fn test_missing_var_error() {
+        let app = test::init_service(App::new().service(send_email)).await;
+        let req = test::TestRequest::post()
+            .uri("/send-mail")
+            .insert_header(header::ContentType::json())
+            .set_payload(r#"{"subject": "Test subject!", "body": "Test body!"}"#)
+            .to_request();
+        let resp: EmailSendResponse = test::call_and_read_body_json(&app, req).await;
+
+        assert_eq!(
+            resp,
+            EmailSendResponse::error(
+                "Required env variable not set",
+                Some("Internal Server Error")
+            )
+        );
+    }
 }

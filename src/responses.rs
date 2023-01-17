@@ -6,7 +6,7 @@ use actix_web::{
     HttpResponse,
 };
 use derive_more::Display;
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Display)]
 pub enum UserError {
@@ -32,12 +32,13 @@ impl error::ResponseError for UserError {
 }
 
 #[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(Deserialize, PartialEq, Eq))]
 pub struct EmailSendResponse {
-    message: String,
-    success: bool,
+    pub(crate) message: String,
+    pub(crate) success: bool,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    error: Option<String>,
+    pub(crate) error: Option<String>,
 }
 
 impl fmt::Display for EmailSendResponse {
