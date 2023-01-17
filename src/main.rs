@@ -1,13 +1,10 @@
 mod responses;
 mod utils;
 
-use std::env;
+use std::env::{self, set_var};
 
 use actix_cors::Cors;
-use actix_web::{
-    http, middleware::Logger, post, web, App, HttpResponse, HttpServer, Responder, ResponseError,
-    Result,
-};
+use actix_web::{http, middleware::Logger, post, web, App, HttpServer, Responder, Result};
 use dotenvy::dotenv;
 use lambda_web::{is_running_on_lambda, run_actix_on_lambda, LambdaError};
 use log::{info, warn};
@@ -25,7 +22,7 @@ struct EmailBody {
 }
 
 #[post("/send-mail")]
-async fn send_email(req_body: web::Json<EmailBody>) -> Result<impl Responder, impl ResponseError> {
+async fn send_email(req_body: web::Json<EmailBody>) -> Result<impl Responder, UserError> {
     let sendgrid_api_key = EnvVars::get_sendgrid_api_key()?;
     let from_email = EnvVars::get_send_from_email()?;
     let to_email = EnvVars::get_send_to_email()?;
@@ -38,7 +35,6 @@ async fn send_email(req_body: web::Json<EmailBody>) -> Result<impl Responder, im
         .set_body(&req_body.body);
 
     let response_message = sendgrid.send().map_err(|err| {
-        warn!("Error sending email: {}", err);
         UserError::InternalServerError {
             body: EmailSendResponse::error(err.to_string(), Some("Error sending email")),
         }
@@ -48,13 +44,13 @@ async fn send_email(req_body: web::Json<EmailBody>) -> Result<impl Responder, im
         "Message sent: {} | subject: {}",
         response_message, req_body.subject
     );
-    Ok::<HttpResponse, UserError>(EmailSendResponse::ok(response_message))
+    Ok(EmailSendResponse::ok(response_message))
 }
 
 #[actix_web::main]
 async fn main() -> Result<(), LambdaError> {
-    std::env::set_var("RUST_LOG", "info");
-    std::env::set_var("RUST_BACKTRACE", "1");
+    set_var("RUST_LOG", "info");
+    set_var("RUST_BACKTRACE", "1");
 
     tracing_subscriber::registry()
         .with(fmt::layer().with_ansi(false))
