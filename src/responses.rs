@@ -36,9 +36,19 @@ impl error::ResponseError for UserError {
 pub struct EmailSendResponse {
     pub(crate) message: String,
     pub(crate) success: bool,
+    #[serde(skip)]
+    pub(crate) status_code: StatusCode,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) error: Option<String>,
+}
+
+impl error::ResponseError for EmailSendResponse {
+    fn error_response(&self) -> HttpResponse {
+        HttpResponse::build(self.status_code)
+            .insert_header(ContentType::json())
+            .body(self.to_string())
+    }
 }
 
 impl fmt::Display for EmailSendResponse {
@@ -54,6 +64,7 @@ impl EmailSendResponse {
 
     pub fn ok(message: impl Into<String>) -> HttpResponse {
         HttpResponse::Ok().json(Self {
+            status_code: StatusCode::OK,
             message: message.into(),
             success: true,
             error: None,
@@ -66,6 +77,7 @@ impl EmailSendResponse {
         U: Into<String>,
     {
         Self {
+            status_code: StatusCode::INTERNAL_SERVER_ERROR,
             message: message.into(),
             success: false,
             error: error.map(Into::into),

@@ -2,7 +2,12 @@ mod responses;
 mod utils;
 
 use actix_cors::Cors;
-use actix_web::{http, middleware::Logger, post, web, App, HttpServer, Responder, Result};
+use actix_web::{
+    get,
+    http::{self, StatusCode},
+    middleware::Logger,
+    post, web, App, HttpServer, Responder, Result,
+};
 use dotenvy::dotenv;
 use lambda_web::{is_running_on_lambda, run_actix_on_lambda, LambdaError};
 use log::{info, warn};
@@ -20,8 +25,23 @@ struct EmailBody {
     body: String,
 }
 
+#[get("/send-emails")]
+async fn send_emails() -> (impl Responder, StatusCode) {
+    ("Not implemented yet", StatusCode::CONFLICT)
+}
+
 #[post("/send-mail")]
-async fn send_email(req_body: web::Json<EmailBody>) -> Result<impl Responder, UserError> {
+async fn send_email(req_body: web::Json<EmailBody>) -> Result<impl Responder> {
+
+    // https://actix.rs/docs/extractors/
+    return Err(EmailSendResponse {
+        status_code: StatusCode::BAD_REQUEST,
+        message: "Error sending email".to_string(),
+        success: false,
+        error: Some("Error sending email".to_string()),
+    }
+    .into());
+
     let sendgrid_api_key = EnvVars::get_sendgrid_api_key()?;
     let from_email = EnvVars::get_send_from_email()?;
     let to_email = EnvVars::get_send_to_email()?;
@@ -84,6 +104,7 @@ async fn main() -> Result<(), LambdaError> {
                 }),
             )
             .service(send_email)
+            .service(send_emails)
     };
 
     info!("App version: v{}", env!("CARGO_PKG_VERSION"));
