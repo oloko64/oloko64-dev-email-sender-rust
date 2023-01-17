@@ -1,19 +1,18 @@
 mod responses;
 mod utils;
 
-use std::env;
-
 use actix_cors::Cors;
-use actix_web::{http, post, web, App, HttpServer, Responder};
+use actix_web::{http, middleware::Logger, post, web, App, HttpServer, Responder, Result};
 use dotenvy::dotenv;
 use lambda_web::{is_running_on_lambda, run_actix_on_lambda, LambdaError};
 use log::{info, warn};
 use sendgrid_thin::Sendgrid;
 use serde::Deserialize;
+use std::env::{self, set_var};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 use utils::{get_socket_addr, EnvVars};
 
-use crate::responses::EmailSendResponse;
+use crate::responses::{EmailSendResponse, UserError};
 
 #[derive(Deserialize)]
 struct EmailBody {
@@ -22,19 +21,10 @@ struct EmailBody {
 }
 
 #[post("/send-mail")]
-async fn send_email(req_body: web::Json<EmailBody>) -> impl Responder {
-    let sendgrid_api_key = match EnvVars::get_sendgrid_api_key() {
-        Ok(value) => value,
-        Err(http_response) => return http_response,
-    };
-    let from_email = match EnvVars::get_send_from_email() {
-        Ok(value) => value,
-        Err(http_response) => return http_response,
-    };
-    let to_email = match EnvVars::get_send_to_email() {
-        Ok(value) => value,
-        Err(http_response) => return http_response,
-    };
+async fn send_email(req_body: web::Json<EmailBody>) -> Result<impl Responder, UserError> {
+    let sendgrid_api_key = EnvVars::get_sendgrid_api_key()?;
+    let from_email = EnvVars::get_send_from_email()?;
+    let to_email = EnvVars::get_send_to_email()?;
 
     let mut sendgrid = Sendgrid::new(sendgrid_api_key);
     sendgrid
@@ -43,23 +33,23 @@ async fn send_email(req_body: web::Json<EmailBody>) -> impl Responder {
         .set_subject(&req_body.subject)
         .set_body(&req_body.body);
 
-    match sendgrid.send() {
-        Ok(message) => {
-            info!(
-                "Message sent: {:?} | subject: {}",
-                message, req_body.subject
-            );
-            EmailSendResponse::ok(&message)
-        }
-        Err(err) => {
-            sentry::capture_message(&err.to_string(), sentry::Level::Error);
-            EmailSendResponse::bad_request("Error Sending Email", Some(&err.to_string()))
-        }
-    }
+    let response_message = sendgrid
+        .send()
+        .map_err(|err| UserError::InternalServerError {
+            body: EmailSendResponse::error(err.to_string(), Some("Error sending email")),
+        })?;
+
+    info!(
+        "Message sent: {} | subject: {}",
+        response_message, req_body.subject
+    );
+    Ok(EmailSendResponse::ok(response_message))
 }
 
 #[actix_web::main]
 async fn main() -> Result<(), LambdaError> {
+    set_var("RUST_LOG", "info");
+
     tracing_subscriber::registry()
         .with(fmt::layer().with_ansi(false))
         .with(EnvFilter::from_default_env())
@@ -79,6 +69,8 @@ async fn main() -> Result<(), LambdaError> {
 
     let factory = move || {
         App::new()
+            .wrap(sentry_actix::Sentry::new())
+            .wrap(Logger::default())
             .wrap(
                 Cors::default()
                     .allowed_origin("https://www.oloko64.dev")
@@ -108,4 +100,29 @@ async fn main() -> Result<(), LambdaError> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use actix_web::{http::header, test, App};
+
+    #[actix_web::test]
+    async fn test_missing_var_error() {
+        let app = test::init_service(App::new().service(send_email)).await;
+        let req = test::TestRequest::post()
+            .uri("/send-mail")
+            .insert_header(header::ContentType::json())
+            .set_payload(r#"{"subject": "Test subject!", "body": "Test body!"}"#)
+            .to_request();
+        let resp: EmailSendResponse = test::call_and_read_body_json(&app, req).await;
+
+        assert_eq!(
+            resp,
+            EmailSendResponse::error(
+                "Required env variable not set",
+                Some("Internal Server Error")
+            )
+        );
+    }
 }

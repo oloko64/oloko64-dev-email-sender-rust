@@ -1,37 +1,74 @@
-use actix_web::HttpResponse;
-use serde::Serialize;
+use std::fmt;
 
-#[derive(Serialize)]
-pub struct EmailSendResponse<'a> {
-    message: &'a str,
-    success: bool,
+use actix_web::{
+    error,
+    http::{header::ContentType, StatusCode},
+    HttpResponse,
+};
+use derive_more::Display;
+use serde::{Serialize, Deserialize};
 
-    #[serde(skip_serializing_if = "Option::is_none")]
-    error: Option<&'a str>,
+#[derive(Debug, Display)]
+pub enum UserError {
+    #[display(fmt = "{body}")]
+    BadRequest { body: EmailSendResponse },
+
+    #[display(fmt = "{body}")]
+    InternalServerError { body: EmailSendResponse },
 }
 
-impl<'a> EmailSendResponse<'a> {
-    pub fn ok(message: &'a str) -> HttpResponse {
+impl error::ResponseError for UserError {
+    fn error_response(&self) -> HttpResponse {
+        HttpResponse::build(self.status_code())
+            .insert_header(ContentType::json())
+            .body(self.to_string())
+    }
+    fn status_code(&self) -> StatusCode {
+        match *self {
+            UserError::BadRequest { .. } => StatusCode::BAD_REQUEST,
+            UserError::InternalServerError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(Deserialize, PartialEq, Eq))]
+pub struct EmailSendResponse {
+    pub(crate) message: String,
+    pub(crate) success: bool,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) error: Option<String>,
+}
+
+impl fmt::Display for EmailSendResponse {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.json_string())
+    }
+}
+
+impl EmailSendResponse {
+    fn json_string(&self) -> String {
+        serde_json::to_string(&self).expect("Failed to serialize response")
+    }
+
+    pub fn ok(message: impl Into<String>) -> HttpResponse {
         HttpResponse::Ok().json(Self {
-            message,
+            message: message.into(),
             success: true,
             error: None,
         })
     }
 
-    pub fn internal_server_error(message: &'a str, error: Option<&'a str>) -> HttpResponse {
-        HttpResponse::InternalServerError().json(Self {
-            message,
+    pub fn error<T, U>(message: T, error: Option<U>) -> Self
+    where
+        T: Into<String>,
+        U: Into<String>,
+    {
+        Self {
+            message: message.into(),
             success: false,
-            error,
-        })
-    }
-
-    pub fn bad_request(message: &'a str, error: Option<&'a str>) -> HttpResponse {
-        HttpResponse::BadRequest().json(Self {
-            message,
-            success: false,
-            error,
-        })
+            error: error.map(Into::into),
+        }
     }
 }
