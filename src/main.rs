@@ -6,7 +6,7 @@ use actix_web::{
     get,
     http::{self, StatusCode},
     middleware::Logger,
-    post, web, App, HttpServer, Responder, Result,
+    post, web, App, HttpServer, Responder, Result, error,
 };
 use dotenvy::dotenv;
 use lambda_web::{is_running_on_lambda, run_actix_on_lambda, LambdaError};
@@ -17,7 +17,7 @@ use std::env::{self, set_var};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 use utils::{get_socket_addr, EnvVars};
 
-use crate::responses::{EmailSendResponse, UserError};
+use crate::responses::{EmailSendResponse, UserError, EmailSendResponseTest};
 
 #[derive(Deserialize)]
 struct EmailBody {
@@ -32,6 +32,14 @@ async fn send_emails() -> (impl Responder, StatusCode) {
 
 #[post("/send-mail")]
 async fn send_email(req_body: web::Json<EmailBody>) -> Result<impl Responder> {
+
+    let teste = Err(EmailSendResponseTest {
+        message: "Error sending email".to_string(),
+        success: false,
+        error: Some("Error sending email".to_string()),
+    });
+
+    teste.map_err(|err| error::ErrorBadRequest(err.message))?;
 
     // https://actix.rs/docs/extractors/
     return Err(EmailSendResponse {

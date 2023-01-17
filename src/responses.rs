@@ -31,6 +31,12 @@ impl error::ResponseError for UserError {
     }
 }
 
+pub struct EmailSendResponseTest {
+    pub message: String,
+    pub success: bool,
+    pub error: Option<String>,
+}
+
 #[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(Deserialize, PartialEq, Eq))]
 pub struct EmailSendResponse {
