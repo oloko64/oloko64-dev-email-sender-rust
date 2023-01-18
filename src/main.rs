@@ -12,7 +12,7 @@ use std::env::{self, set_var};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 use utils::{get_socket_addr, EnvVars};
 
-use crate::responses::{UserError, EmailSentResponse};
+use crate::responses::{EmailSentResponse, UserError};
 
 #[derive(Deserialize)]
 struct EmailBody {
@@ -36,7 +36,8 @@ async fn send_email(req_body: web::Json<EmailBody>) -> Result<impl Responder, Us
     let response_message = sendgrid
         .send()
         .map_err(|err| UserError::InternalServerError {
-            message: "Error sending email".to_string(), error: err.to_string(),
+            message: "Error sending email".to_string(),
+            error: err.to_string(),
         })?;
 
     info!(
@@ -105,7 +106,7 @@ async fn main() -> Result<(), LambdaError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use actix_web::{http::header, test, App, web::Bytes};
+    use actix_web::{http::header, test, web::Bytes, App};
 
     #[actix_web::test]
     async fn test_missing_var_error() {
