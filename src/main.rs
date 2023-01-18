@@ -2,7 +2,11 @@ mod responses;
 mod utils;
 
 use actix_cors::Cors;
-use actix_web::{http, middleware::Logger, post, web, App, HttpServer, Responder, Result};
+use actix_web::{
+    http::{self, StatusCode},
+    middleware::Logger,
+    post, web, App, HttpServer, Responder, Result,
+};
 use dotenvy::dotenv;
 use lambda_web::{is_running_on_lambda, run_actix_on_lambda, LambdaError};
 use log::{info, warn};
@@ -12,7 +16,7 @@ use std::env::{self, set_var};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 use utils::{get_socket_addr, EnvVars};
 
-use crate::responses::{EmailSendResponse, UserError};
+use crate::responses::EmailSendResponse;
 
 #[derive(Deserialize)]
 struct EmailBody {
@@ -21,7 +25,7 @@ struct EmailBody {
 }
 
 #[post("/send-mail")]
-async fn send_email(req_body: web::Json<EmailBody>) -> Result<impl Responder, UserError> {
+async fn send_email(req_body: web::Json<EmailBody>) -> Result<impl Responder, EmailSendResponse> {
     let sendgrid_api_key = EnvVars::get_sendgrid_api_key()?;
     let from_email = EnvVars::get_send_from_email()?;
     let to_email = EnvVars::get_send_to_email()?;
@@ -33,17 +37,23 @@ async fn send_email(req_body: web::Json<EmailBody>) -> Result<impl Responder, Us
         .set_subject(&req_body.subject)
         .set_body(&req_body.body);
 
-    let response_message = sendgrid
-        .send()
-        .map_err(|err| UserError::InternalServerError {
-            body: EmailSendResponse::error(err.to_string(), Some("Error sending email")),
-        })?;
+    let response_message = sendgrid.send().map_err(|err| {
+        EmailSendResponse::new(
+            http::StatusCode::INTERNAL_SERVER_ERROR,
+            "Error sending email",
+            Some(err.to_string()),
+        )
+    })?;
 
     info!(
         "Message sent: {} | subject: {}",
         response_message, req_body.subject
     );
-    Ok(EmailSendResponse::ok(response_message))
+    Ok(EmailSendResponse::create(
+        StatusCode::OK,
+        response_message,
+        None::<String>,
+    ))
 }
 
 #[actix_web::main]
@@ -119,7 +129,8 @@ mod tests {
 
         assert_eq!(
             resp,
-            EmailSendResponse::error(
+            EmailSendResponse::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
                 "Required env variable not set",
                 Some("Internal Server Error")
             )

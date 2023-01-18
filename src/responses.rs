@@ -5,40 +5,29 @@ use actix_web::{
     http::{header::ContentType, StatusCode},
     HttpResponse,
 };
-use derive_more::Display;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Display)]
-pub enum UserError {
-    #[display(fmt = "{body}")]
-    BadRequest { body: EmailSendResponse },
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(Deserialize, PartialEq, Eq))]
+pub struct EmailSendResponse {
+    message: String,
 
-    #[display(fmt = "{body}")]
-    InternalServerError { body: EmailSendResponse },
+    #[serde(skip)]
+    status_code: StatusCode,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
 }
 
-impl error::ResponseError for UserError {
+impl error::ResponseError for EmailSendResponse {
     fn error_response(&self) -> HttpResponse {
         HttpResponse::build(self.status_code())
             .insert_header(ContentType::json())
             .body(self.to_string())
     }
     fn status_code(&self) -> StatusCode {
-        match *self {
-            UserError::BadRequest { .. } => StatusCode::BAD_REQUEST,
-            UserError::InternalServerError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-        }
+        self.status_code
     }
-}
-
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(Deserialize, PartialEq, Eq))]
-pub struct EmailSendResponse {
-    pub(crate) message: String,
-    pub(crate) success: bool,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) error: Option<String>,
 }
 
 impl fmt::Display for EmailSendResponse {
@@ -48,27 +37,31 @@ impl fmt::Display for EmailSendResponse {
 }
 
 impl EmailSendResponse {
-    fn json_string(&self) -> String {
-        serde_json::to_string(&self).expect("Failed to serialize response")
-    }
-
-    pub fn ok(message: impl Into<String>) -> HttpResponse {
-        HttpResponse::Ok().json(Self {
-            message: message.into(),
-            success: true,
-            error: None,
-        })
-    }
-
-    pub fn error<T, U>(message: T, error: Option<U>) -> Self
+    pub fn new<T, U>(status_code: StatusCode, message: T, error: Option<U>) -> Self
     where
         T: Into<String>,
         U: Into<String>,
     {
         Self {
+            status_code,
             message: message.into(),
-            success: false,
-            error: error.map(Into::into),
+            error: error.map(std::convert::Into::into),
         }
+    }
+
+    pub fn create<T, U>(status_code: StatusCode, message: T, error: Option<U>) -> HttpResponse
+    where
+        T: Into<String>,
+        U: Into<String>,
+    {
+        HttpResponse::Ok().json(Self {
+            status_code,
+            message: message.into(),
+            error: error.map(std::convert::Into::into),
+        })
+    }
+
+    fn json_string(&self) -> String {
+        serde_json::to_string(&self).expect("Failed to serialize response")
     }
 }
