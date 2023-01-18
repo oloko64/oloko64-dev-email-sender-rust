@@ -3,21 +3,24 @@ mod utils;
 
 use actix_cors::Cors;
 use actix_web::{
-    get,
+    error, get,
     http::{self, StatusCode},
     middleware::Logger,
-    post, web, App, HttpServer, Responder, Result, error,
+    post, web, App, HttpServer, Responder, ResponseError, Result,
 };
 use dotenvy::dotenv;
 use lambda_web::{is_running_on_lambda, run_actix_on_lambda, LambdaError};
 use log::{info, warn};
 use sendgrid_thin::Sendgrid;
 use serde::Deserialize;
-use std::env::{self, set_var};
+use std::{
+    env::{self, set_var},
+    error::Error,
+};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 use utils::{get_socket_addr, EnvVars};
 
-use crate::responses::{EmailSendResponse, UserError, EmailSendResponseTest};
+use crate::responses::{EmailSendResponse, EmailSendResponseTest, UserError};
 
 #[derive(Deserialize)]
 struct EmailBody {
@@ -26,13 +29,21 @@ struct EmailBody {
 }
 
 #[get("/send-emails")]
-async fn send_emails() -> (impl Responder, StatusCode) {
-    ("Not implemented yet", StatusCode::CONFLICT)
+async fn send_emails() -> Result<impl Responder> {
+    return Err(
+        EmailSendResponse {
+            status_code: StatusCode::BAD_REQUEST,
+            message: "Error sending email".to_string(),
+            success: false,
+            error: Some("Error sending email".to_string()),
+        }
+        .into(),
+    );
+    Ok(EmailSendResponse::ok("Message sent".to_string()))
 }
 
 #[post("/send-mail")]
 async fn send_email(req_body: web::Json<EmailBody>) -> Result<impl Responder> {
-
     let teste = Err(EmailSendResponseTest {
         message: "Error sending email".to_string(),
         success: false,
