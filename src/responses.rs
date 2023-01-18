@@ -17,22 +17,11 @@ pub enum UserError {
 
 impl fmt::Display for UserError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            UserError::BadRequest { .. } => {
-                write!(
-                    f,
-                    "{}",
-                    serde_json::to_string(&self).expect("Failed to serialize response")
-                )
-            }
-            UserError::InternalServerError { .. } => {
-                write!(
-                    f,
-                    "{}",
-                    serde_json::to_string(&self).expect("Failed to serialize response")
-                )
-            }
-        }
+        write!(
+            f,
+            "{}",
+            serde_json::to_string(&self).expect("Failed to serialize response")
+        )
     }
 }
 
