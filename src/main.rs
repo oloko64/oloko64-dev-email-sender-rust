@@ -12,7 +12,7 @@ use std::env::{self, set_var};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 use utils::{get_socket_addr, EnvVars};
 
-use crate::responses::{EmailSendResponse, UserError};
+use crate::responses::{UserError, EmailSentResponse};
 
 #[derive(Deserialize)]
 struct EmailBody {
@@ -36,14 +36,14 @@ async fn send_email(req_body: web::Json<EmailBody>) -> Result<impl Responder, Us
     let response_message = sendgrid
         .send()
         .map_err(|err| UserError::InternalServerError {
-            body: EmailSendResponse::error(err.to_string(), Some("Error sending email")),
+            message: "Error sending email".to_string(), error: err.to_string(),
         })?;
 
     info!(
         "Message sent: {} | subject: {}",
         response_message, req_body.subject
     );
-    Ok(EmailSendResponse::ok(response_message))
+    Ok(EmailSentResponse::ok(response_message))
 }
 
 #[actix_web::main]
@@ -105,7 +105,7 @@ async fn main() -> Result<(), LambdaError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use actix_web::{http::header, test, App};
+    use actix_web::{http::header, test, App, web::Bytes};
 
     #[actix_web::test]
     async fn test_missing_var_error() {
@@ -115,14 +115,11 @@ mod tests {
             .insert_header(header::ContentType::json())
             .set_payload(r#"{"subject": "Test subject!", "body": "Test body!"}"#)
             .to_request();
-        let resp: EmailSendResponse = test::call_and_read_body_json(&app, req).await;
+        let resp = test::call_and_read_body(&app, req).await;
 
         assert_eq!(
             resp,
-            EmailSendResponse::error(
-                "Required env variable not set",
-                Some("Internal Server Error")
-            )
+            Bytes::from_static(br#"{"message":"Required env variable not set","error":"Required env variable not set"}"#)
         );
     }
 }

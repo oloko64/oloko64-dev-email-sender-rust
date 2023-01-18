@@ -1,4 +1,4 @@
-use crate::responses::{EmailSendResponse, UserError};
+use crate::responses::UserError;
 use log::warn;
 use std::{env, net::SocketAddr};
 
@@ -21,7 +21,8 @@ impl EnvVars {
 
     pub fn get_env_variable(env_variable: &str, error_message: &str) -> Result<String, UserError> {
         let env_value = env::var(env_variable).map_err(|_| UserError::InternalServerError {
-            body: EmailSendResponse::error(error_message, Some("Internal Server Error")),
+            message: error_message.to_string(),
+            error: error_message.to_string(),
         })?;
 
         Ok(env_value)
