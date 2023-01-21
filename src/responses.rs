@@ -5,16 +5,24 @@ use actix_web::{
     http::{header::ContentType, StatusCode},
     HttpResponse,
 };
-use derive_more::Display;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Display)]
+#[derive(Debug, Serialize)]
+#[serde(untagged)]
 pub enum UserError {
-    #[display(fmt = "{body}")]
-    BadRequest { body: EmailSendResponse },
+    BadRequest { message: String, error: String },
 
-    #[display(fmt = "{body}")]
-    InternalServerError { body: EmailSendResponse },
+    InternalServerError { message: String, error: String },
+}
+
+impl fmt::Display for UserError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            serde_json::to_string(&self).expect("Failed to serialize response")
+        )
+    }
 }
 
 impl error::ResponseError for UserError {
@@ -31,44 +39,22 @@ impl error::ResponseError for UserError {
     }
 }
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(Deserialize, PartialEq, Eq))]
-pub struct EmailSendResponse {
-    pub(crate) message: String,
-    pub(crate) success: bool,
+#[derive(Debug, Serialize, Deserialize)]
+pub struct EmailSentResponse {
+    message: String,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) error: Option<String>,
+    error: Option<String>,
 }
 
-impl fmt::Display for EmailSendResponse {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.json_string())
-    }
-}
-
-impl EmailSendResponse {
-    fn json_string(&self) -> String {
-        serde_json::to_string(&self).expect("Failed to serialize response")
-    }
-
-    pub fn ok(message: impl Into<String>) -> HttpResponse {
-        HttpResponse::Ok().json(Self {
-            message: message.into(),
-            success: true,
-            error: None,
-        })
-    }
-
-    pub fn error<T, U>(message: T, error: Option<U>) -> Self
+impl EmailSentResponse {
+    pub fn ok<T>(message: T) -> HttpResponse
     where
         T: Into<String>,
-        U: Into<String>,
     {
-        Self {
+        HttpResponse::Ok().json(EmailSentResponse {
             message: message.into(),
-            success: false,
-            error: error.map(Into::into),
-        }
+            error: None,
+        })
     }
 }
