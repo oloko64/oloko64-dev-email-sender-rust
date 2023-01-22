@@ -50,7 +50,7 @@ impl EmailSentResponse {
         T: Into<String>,
     {
         HttpResponse::Ok().json(EmailSentResponse {
-            message: message.into()
+            message: message.into(),
         })
     }
 }
