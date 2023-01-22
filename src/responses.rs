@@ -42,9 +42,6 @@ impl error::ResponseError for UserError {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct EmailSentResponse {
     message: String,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    error: Option<String>,
 }
 
 impl EmailSentResponse {
@@ -53,8 +50,7 @@ impl EmailSentResponse {
         T: Into<String>,
     {
         HttpResponse::Ok().json(EmailSentResponse {
-            message: message.into(),
-            error: None,
+            message: message.into()
         })
     }
 }
