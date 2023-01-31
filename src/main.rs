@@ -41,8 +41,8 @@ async fn send_email(req_body: web::Json<EmailBody>) -> Result<impl Responder, Us
         })?;
 
     info!(
-        "Message sent: {} | subject: {}",
-        response_message, req_body.subject
+        "Message sent: {response_message} | subject: {}",
+        req_body.subject
     );
     Ok(EmailSentResponse::ok(response_message))
 }
