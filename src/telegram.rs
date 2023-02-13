@@ -1,5 +1,3 @@
-use log::info;
-
 use crate::{responses::UserError, utils::EnvVars};
 
 pub struct Telegram;
@@ -39,8 +37,6 @@ impl Telegram {
                     })?,
             });
         }
-
-        info!("Telegram notification sent");
 
         response
             .text()
