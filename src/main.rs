@@ -40,10 +40,7 @@ async fn send_email(req_body: web::Json<EmailBody>) -> Result<impl Responder, Er
 
     let email_response = sendgrid
         .send()
-        .map_err(|err| UserError::InternalServerError {
-            message: "Error sending email".to_string(),
-            error: err.to_string(),
-        })?;
+        .unwrap_or("Error while sending email".to_string());
 
     let sent_response = format!(
         "Email response -> {email_response} | Telegram response -> {}",
