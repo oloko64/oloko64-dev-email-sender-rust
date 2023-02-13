@@ -1,4 +1,5 @@
 mod responses;
+mod telegram;
 mod utils;
 
 use actix_cors::Cors;
@@ -12,7 +13,10 @@ use std::env::{self, set_var};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 use utils::{get_socket_addr, EnvVars};
 
-use crate::responses::{EmailSentResponse, UserError};
+use crate::{
+    responses::{EmailSentResponse, UserError},
+    telegram::Telegram,
+};
 
 #[derive(Deserialize)]
 struct EmailBody {
@@ -32,18 +36,23 @@ async fn send_email(req_body: web::Json<EmailBody>) -> Result<impl Responder, Er
         .set_subject(&req_body.subject)
         .set_body(&req_body.body);
 
-    let response_message = sendgrid
+    let telegram_response = Telegram::send_notification(&req_body.subject, &req_body.body);
+
+    let email_response = sendgrid
         .send()
         .map_err(|err| UserError::InternalServerError {
             message: "Error sending email".to_string(),
             error: err.to_string(),
         })?;
 
-    info!(
-        "Message sent: {response_message} | subject: {}",
-        req_body.subject
+    let sent_response = format!(
+        "Email response -> {email_response} | Telegram response -> {}",
+        telegram_response.await?
     );
-    Ok(EmailSentResponse::ok(response_message))
+
+    info!("Message sent with subject: {}", req_body.subject);
+    info!("{}", &sent_response);
+    Ok(EmailSentResponse::ok(sent_response))
 }
 
 #[actix_web::main]

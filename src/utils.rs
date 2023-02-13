@@ -7,6 +7,14 @@ const DEFAULT_PORT: u16 = 8080;
 pub struct EnvVars;
 
 impl EnvVars {
+    pub fn get_telegram_bot_token() -> Result<String, UserError> {
+        Self::get_env_variable("TELEGRAM_BOT_TOKEN")
+    }
+
+    pub fn get_telegram_chat_id() -> Result<String, UserError> {
+        Self::get_env_variable("TELEGRAM_CHAT_ID")
+    }
+
     pub fn get_sendgrid_api_key() -> Result<String, UserError> {
         Self::get_env_variable("SENDGRID_API_KEY")
     }
