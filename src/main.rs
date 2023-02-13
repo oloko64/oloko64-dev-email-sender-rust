@@ -1,8 +1,9 @@
 mod responses;
+mod telegram;
 mod utils;
 
 use actix_cors::Cors;
-use actix_web::{http, middleware::Logger, post, web, App, HttpServer, Responder, Result};
+use actix_web::{http, middleware::Logger, web, App, Error, HttpServer, Responder, Result};
 use dotenvy::dotenv;
 use lambda_web::{is_running_on_lambda, run_actix_on_lambda, LambdaError};
 use log::{info, warn};
@@ -12,7 +13,7 @@ use std::env::{self, set_var};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 use utils::{get_socket_addr, EnvVars};
 
-use crate::responses::{EmailSentResponse, UserError};
+use crate::{responses::EmailSentResponse, telegram::Telegram};
 
 #[derive(Deserialize)]
 struct EmailBody {
@@ -20,8 +21,7 @@ struct EmailBody {
     body: String,
 }
 
-#[post("/send-mail")]
-async fn send_email(req_body: web::Json<EmailBody>) -> Result<impl Responder, UserError> {
+async fn send_email(req_body: web::Json<EmailBody>) -> Result<impl Responder, Error> {
     let sendgrid_api_key = EnvVars::get_sendgrid_api_key()?;
     let from_email = EnvVars::get_send_from_email()?;
     let to_email = EnvVars::get_send_to_email()?;
@@ -33,29 +33,33 @@ async fn send_email(req_body: web::Json<EmailBody>) -> Result<impl Responder, Us
         .set_subject(&req_body.subject)
         .set_body(&req_body.body);
 
-    let response_message = sendgrid
-        .send()
-        .map_err(|err| UserError::InternalServerError {
-            message: "Error sending email".to_string(),
-            error: err.to_string(),
-        })?;
+    let telegram_response = Telegram::send_notification(&req_body.subject, &req_body.body);
 
-    info!(
-        "Message sent: {response_message} | subject: {}",
-        req_body.subject
+    let email_response = sendgrid
+        .send()
+        .unwrap_or("Error while sending email".to_string());
+
+    let sent_response = format!(
+        "Email response -> {email_response} | Telegram response -> {}",
+        telegram_response.await?
     );
-    Ok(EmailSentResponse::ok(response_message))
+
+    info!("Message sent with subject: {}", req_body.subject);
+    info!("{}", &sent_response);
+    Ok(EmailSentResponse::ok(sent_response))
 }
 
 #[actix_web::main]
 async fn main() -> Result<(), LambdaError> {
-    set_var("RUST_LOG", "info");
+    dotenv().ok();
+    if env::var("RUST_LOG").is_err() {
+        set_var("RUST_LOG", "info");
+    }
 
     tracing_subscriber::registry()
         .with(fmt::layer().with_ansi(false))
         .with(EnvFilter::from_default_env())
         .init();
-    dotenv().ok();
     let sentry_api_key = env::var("SENTRY_API_KEY").unwrap_or_else(|_| {
         warn!("Sentry API Key not found, not reporting errors to Sentry");
         String::new()
@@ -63,6 +67,7 @@ async fn main() -> Result<(), LambdaError> {
     let _guard = sentry::init((
         sentry_api_key,
         sentry::ClientOptions {
+            attach_stacktrace: true,
             release: sentry::release_name!(),
             ..Default::default()
         },
@@ -84,7 +89,7 @@ async fn main() -> Result<(), LambdaError> {
                     "My custom email service for my website using Actix-Web and SendGrid"
                 }),
             )
-            .service(send_email)
+            .route("/send-mail", web::post().to(send_email))
     };
 
     info!("App version: v{}", env!("CARGO_PKG_VERSION"));
@@ -110,7 +115,8 @@ mod tests {
 
     #[actix_web::test]
     async fn test_missing_var_error() {
-        let app = test::init_service(App::new().service(send_email)).await;
+        let app =
+            test::init_service(App::new().route("/send-mail", web::post().to(send_email))).await;
         let req = test::TestRequest::post()
             .uri("/send-mail")
             .insert_header(header::ContentType::json())
