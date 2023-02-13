@@ -13,10 +13,7 @@ use std::env::{self, set_var};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 use utils::{get_socket_addr, EnvVars};
 
-use crate::{
-    responses::{EmailSentResponse, UserError},
-    telegram::Telegram,
-};
+use crate::{responses::EmailSentResponse, telegram::Telegram};
 
 #[derive(Deserialize)]
 struct EmailBody {
