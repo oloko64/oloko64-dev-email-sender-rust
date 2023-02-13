@@ -2,7 +2,7 @@ mod responses;
 mod utils;
 
 use actix_cors::Cors;
-use actix_web::{http, middleware::Logger, post, web, App, HttpServer, Responder, Result};
+use actix_web::{http, middleware::Logger, web, App, Error, HttpServer, Responder, Result};
 use dotenvy::dotenv;
 use lambda_web::{is_running_on_lambda, run_actix_on_lambda, LambdaError};
 use log::{info, warn};
@@ -20,8 +20,7 @@ struct EmailBody {
     body: String,
 }
 
-#[post("/send-mail")]
-async fn send_email(req_body: web::Json<EmailBody>) -> Result<impl Responder, UserError> {
+async fn send_email(req_body: web::Json<EmailBody>) -> Result<impl Responder, Error> {
     let sendgrid_api_key = EnvVars::get_sendgrid_api_key()?;
     let from_email = EnvVars::get_send_from_email()?;
     let to_email = EnvVars::get_send_to_email()?;
@@ -49,13 +48,15 @@ async fn send_email(req_body: web::Json<EmailBody>) -> Result<impl Responder, Us
 
 #[actix_web::main]
 async fn main() -> Result<(), LambdaError> {
-    set_var("RUST_LOG", "info");
+    dotenv().ok();
+    if env::var("RUST_LOG").is_err() {
+        set_var("RUST_LOG", "info");
+    }
 
     tracing_subscriber::registry()
         .with(fmt::layer().with_ansi(false))
         .with(EnvFilter::from_default_env())
         .init();
-    dotenv().ok();
     let sentry_api_key = env::var("SENTRY_API_KEY").unwrap_or_else(|_| {
         warn!("Sentry API Key not found, not reporting errors to Sentry");
         String::new()
@@ -63,6 +64,7 @@ async fn main() -> Result<(), LambdaError> {
     let _guard = sentry::init((
         sentry_api_key,
         sentry::ClientOptions {
+            attach_stacktrace: true,
             release: sentry::release_name!(),
             ..Default::default()
         },
@@ -84,7 +86,7 @@ async fn main() -> Result<(), LambdaError> {
                     "My custom email service for my website using Actix-Web and SendGrid"
                 }),
             )
-            .service(send_email)
+            .route("/send-mail", web::post().to(send_email))
     };
 
     info!("App version: v{}", env!("CARGO_PKG_VERSION"));
@@ -110,7 +112,8 @@ mod tests {
 
     #[actix_web::test]
     async fn test_missing_var_error() {
-        let app = test::init_service(App::new().service(send_email)).await;
+        let app =
+            test::init_service(App::new().route("/send-mail", web::post().to(send_email))).await;
         let req = test::TestRequest::post()
             .uri("/send-mail")
             .insert_header(header::ContentType::json())
