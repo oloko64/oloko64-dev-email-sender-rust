@@ -1,8 +1,17 @@
 use crate::responses::UserError;
+use actix_web::web;
 use log::warn;
+use serde::Deserialize;
 use std::{env, net::SocketAddr};
+use unicode_segmentation::UnicodeSegmentation;
 
 const DEFAULT_PORT: u16 = 8080;
+
+#[derive(Deserialize)]
+pub struct EmailBody {
+    pub subject: String,
+    pub body: String,
+}
 
 pub struct EnvVars;
 
@@ -36,6 +45,26 @@ impl EnvVars {
 
         Ok(env_value)
     }
+}
+
+pub fn validate_body(body: &web::Json<EmailBody>) -> Result<(), String> {
+    if body.subject.is_empty() {
+        return Err(String::from("Subject cannot be empty"));
+    }
+
+    if body.body.is_empty() {
+        return Err(String::from("Body cannot be empty"));
+    }
+
+    if body.subject.graphemes(true).count() > 50 {
+        return Err(String::from("Subject cannot be longer than 50 characters"));
+    }
+
+    if body.body.graphemes(true).count() > 2000 {
+        return Err(String::from("Body cannot be longer than 2000 characters"));
+    }
+
+    Ok(())
 }
 
 pub fn get_socket_addr() -> SocketAddr {

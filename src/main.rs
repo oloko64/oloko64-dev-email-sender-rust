@@ -6,22 +6,26 @@ use actix_cors::Cors;
 use actix_web::{http, middleware::Logger, web, App, Error, HttpServer, Responder, Result};
 use dotenvy::dotenv;
 use lambda_web::{is_running_on_lambda, run_actix_on_lambda, LambdaError};
-use log::{info, warn};
+use log::{error, info, warn};
 use sendgrid_thin::Sendgrid;
-use serde::Deserialize;
 use std::env::{self, set_var};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
-use utils::{get_socket_addr, EnvVars};
+use utils::{get_socket_addr, EmailBody, EnvVars};
 
-use crate::{responses::EmailSentResponse, telegram::Telegram};
-
-#[derive(Deserialize)]
-struct EmailBody {
-    subject: String,
-    body: String,
-}
+use crate::{
+    responses::{EmailSentResponse, UserError},
+    telegram::Telegram,
+};
 
 async fn send_email(req_body: web::Json<EmailBody>) -> Result<impl Responder, Error> {
+    utils::validate_body(&req_body).map_err(|err| {
+        error!("Error while validating body: {err}");
+        UserError::BadRequest {
+            message: String::from("Error while validating body"),
+            error: err,
+        }
+    })?;
+
     let sendgrid_api_key = EnvVars::get_sendgrid_api_key()?;
     let from_email = EnvVars::get_send_from_email()?;
     let to_email = EnvVars::get_send_to_email()?;
@@ -37,7 +41,7 @@ async fn send_email(req_body: web::Json<EmailBody>) -> Result<impl Responder, Er
 
     let email_response = sendgrid
         .send()
-        .unwrap_or("Error while sending email".to_string());
+        .unwrap_or(String::from("Error while sending email"));
 
     let sent_response = format!(
         "Email response -> {email_response} | Telegram response -> {}",
