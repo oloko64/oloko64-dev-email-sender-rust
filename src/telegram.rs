@@ -3,7 +3,11 @@ use crate::{responses::UserError, utils::EnvVars};
 pub struct Telegram;
 
 impl Telegram {
-    pub async fn send_notification(subject: &str, message: &str) -> Result<String, UserError> {
+    pub async fn send_notification<T, U>(subject: U, message: T) -> Result<String, UserError>
+    where
+        T: AsRef<str>,
+        U: AsRef<str>,
+    {
         let bot_token = EnvVars::get_telegram_bot_token()?;
         let chat_id = EnvVars::get_telegram_chat_id()?;
 
@@ -13,7 +17,7 @@ impl Telegram {
             ))
             .json(&serde_json::json!({
                 "chat_id": chat_id,
-                "text": format!("Subject -> {subject}\nMessage -> {message}"),
+                "text": format!("Subject: {}\n\n{}", subject.as_ref(), message.as_ref()),
             }))
             .send()
             .await

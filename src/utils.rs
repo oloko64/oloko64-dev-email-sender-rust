@@ -9,6 +9,7 @@ const DEFAULT_PORT: u16 = 8080;
 
 #[derive(Deserialize)]
 pub struct EmailBody {
+    pub contact: String,
     pub subject: String,
     pub body: String,
 }
@@ -48,12 +49,20 @@ impl EnvVars {
 }
 
 pub fn validate_body(body: &web::Json<EmailBody>) -> Result<(), String> {
+    if body.contact.is_empty() {
+        return Err(String::from("Contact cannot be empty"));
+    }
+
     if body.subject.is_empty() {
         return Err(String::from("Subject cannot be empty"));
     }
 
     if body.body.is_empty() {
         return Err(String::from("Body cannot be empty"));
+    }
+
+    if body.contact.graphemes(true).count() > 50 {
+        return Err(String::from("Contact cannot be longer than 50 characters"));
     }
 
     if body.subject.graphemes(true).count() > 50 {
