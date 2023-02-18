@@ -35,22 +35,21 @@ async fn send_message(req_body: web::Json<EmailBody>) -> Result<impl Responder, 
         req_body.contact, req_body.body
     );
 
-    let mut sendgrid = Sendgrid::new(sendgrid_api_key);
-    sendgrid
+    let sendgrid = Sendgrid::new(sendgrid_api_key)
         .set_from_email(from_email)
         .set_to_emails([to_email])
         .set_subject(&req_body.subject)
         .set_body(&message_body);
 
-    let telegram_response = Telegram::send_notification(&req_body.subject, message_body);
-
-    let email_response = sendgrid
-        .send()
-        .unwrap_or(String::from("Error while sending email"));
+    let (telegram_response, email_response) = tokio::join!(
+        Telegram::send_notification(&req_body.subject, message_body),
+        sendgrid.send()
+    );
 
     let sent_response = format!(
-        "Email response -> {email_response} | Telegram response -> {}",
-        telegram_response.await?
+        "Email response -> {} | Telegram response -> {}",
+        email_response.unwrap_or(String::from("Error while sending email")),
+        telegram_response?
     );
 
     info!("Message sent with subject: {}", req_body.subject);
