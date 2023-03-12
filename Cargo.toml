@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [profile.release]
-lto = "thin"
+lto = true
 strip = true
 codegen-units = 1
 
@@ -18,7 +18,7 @@ actix-web = "4.3.1"
 dotenvy = "0.15.6"
 lambda-web = { version = "0.2.1", features = ["actix4"] }
 log = "0.4.17"
-sendgrid_thin = "0.3.0"
+sendgrid_thin = { version = "0.4.2", default-features = false }
 sentry = "0.30.0"
 serde = { version = "1.0.155", features = ["derive"] }
 tracing-subscriber = { version = "0.3.16", features = ["env-filter"] }

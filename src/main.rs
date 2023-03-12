@@ -35,11 +35,21 @@ async fn send_message(req_body: web::Json<EmailBody>) -> Result<impl Responder, 
         req_body.contact, req_body.body
     );
 
-    let sendgrid = Sendgrid::new(sendgrid_api_key)
-        .set_from_email(from_email)
-        .set_to_emails([to_email])
-        .set_subject(&req_body.subject)
-        .set_body(&message_body);
+    let sendgrid = Sendgrid::builder(
+        sendgrid_api_key,
+        from_email,
+        [to_email],
+        &req_body.subject,
+        &message_body,
+    )
+    .build()
+    .map_err(|err| {
+        error!("Error while building Sendgrid: {err}");
+        UserError::InternalServerError {
+            message: String::from("Error while building Sendgrid"),
+            error: err.to_string(),
+        }
+    })?;
 
     let (telegram_response, email_response) = tokio::join!(
         Telegram::send_notification(&req_body.subject, message_body),
