@@ -3,10 +3,7 @@ use crate::{responses::UserError, utils::EnvVars};
 pub struct Telegram;
 
 impl Telegram {
-    pub async fn send_notification<T, U>(
-        subject: U,
-        message: T,
-    ) -> Result<String, Box<dyn std::error::Error>>
+    pub async fn send_notification<T, U>(subject: U, message: T) -> Result<String, UserError>
     where
         T: AsRef<str>,
         U: AsRef<str>,
@@ -32,8 +29,7 @@ impl Telegram {
                     response.status()
                 ),
                 error: response.text().await?,
-            }
-            .into());
+            });
         }
 
         Ok(response.text().await?)

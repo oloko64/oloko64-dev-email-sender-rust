@@ -4,7 +4,7 @@ use actix_web::{
     HttpResponse,
 };
 use serde::{Deserialize, Serialize};
-use std::fmt;
+use std::{env::VarError, fmt};
 
 #[derive(Debug, Serialize)]
 #[serde(untagged)]
@@ -25,6 +25,24 @@ impl fmt::Display for UserError {
 }
 
 impl std::error::Error for UserError {}
+
+impl From<VarError> for UserError {
+    fn from(error: VarError) -> Self {
+        UserError::InternalServerError {
+            message: String::from("Error while getting environment variable"),
+            error: error.to_string(),
+        }
+    }
+}
+
+impl From<reqwest::Error> for UserError {
+    fn from(error: reqwest::Error) -> Self {
+        UserError::InternalServerError {
+            message: String::from("Error while sending request"),
+            error: error.to_string(),
+        }
+    }
+}
 
 impl error::ResponseError for UserError {
     fn error_response(&self) -> HttpResponse {

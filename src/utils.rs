@@ -1,8 +1,10 @@
 use actix_web::web;
 use log::warn;
 use serde::Deserialize;
-use std::{env, error::Error, net::SocketAddr};
+use std::{env, net::SocketAddr};
 use unicode_segmentation::UnicodeSegmentation;
+
+use crate::responses::UserError;
 
 const DEFAULT_PORT: u16 = 8080;
 
@@ -16,23 +18,23 @@ pub struct EmailBody {
 pub struct EnvVars;
 
 impl EnvVars {
-    pub fn get_telegram_bot_token() -> Result<String, Box<dyn Error>> {
+    pub fn get_telegram_bot_token() -> Result<String, UserError> {
         Ok(env::var("TELEGRAM_BOT_TOKEN")?)
     }
 
-    pub fn get_telegram_chat_id() -> Result<String, Box<dyn Error>> {
+    pub fn get_telegram_chat_id() -> Result<String, UserError> {
         Ok(env::var("TELEGRAM_CHAT_ID")?)
     }
 
-    pub fn get_sendgrid_api_key() -> Result<String, Box<dyn Error>> {
+    pub fn get_sendgrid_api_key() -> Result<String, UserError> {
         Ok(env::var("SENDGRID_API_KEY")?)
     }
 
-    pub fn get_send_from_email() -> Result<String, Box<dyn Error>> {
+    pub fn get_send_from_email() -> Result<String, UserError> {
         Ok(env::var("SEND_FROM_EMAIL")?)
     }
 
-    pub fn get_send_to_email() -> Result<String, Box<dyn Error>> {
+    pub fn get_send_to_email() -> Result<String, UserError> {
         Ok(env::var("SEND_TO_EMAIL")?)
     }
 }

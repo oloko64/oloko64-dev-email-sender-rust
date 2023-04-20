@@ -17,9 +17,7 @@ use crate::{
     telegram::Telegram,
 };
 
-async fn send_message(
-    req_body: web::Json<EmailBody>,
-) -> Result<impl Responder, actix_web::error::Error> {
+async fn send_message(req_body: web::Json<EmailBody>) -> Result<impl Responder, UserError> {
     utils::validate_body(&req_body).map_err(|error| {
         error!("Error while validating body: {error}");
         UserError::BadRequest {
@@ -147,10 +145,7 @@ mod tests {
             .to_request();
         let resp = test::call_and_read_body(&app, req).await;
 
-        assert_eq!(
-            resp,
-            Bytes::from_static(b"environment variable not found")
-        );
+        assert_eq!(resp, Bytes::from_static(br#"{"message":"Error while getting environment variable","error":"environment variable not found"}"#));
     }
 
     #[actix_web::test]
