@@ -149,7 +149,7 @@ mod tests {
 
         assert_eq!(
             resp,
-            Bytes::from_static(br#"{"message":"Required env variable not set","error":"Required env variable not set"}"#)
+            Bytes::from_static(b"environment variable not found")
         );
     }
 
