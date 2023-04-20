@@ -3,7 +3,10 @@ use crate::{responses::UserError, utils::EnvVars};
 pub struct Telegram;
 
 impl Telegram {
-    pub async fn send_notification<T, U>(subject: U, message: T) -> Result<String, UserError>
+    pub async fn send_notification<T, U>(
+        subject: U,
+        message: T,
+    ) -> Result<String, Box<dyn std::error::Error>>
     where
         T: AsRef<str>,
         U: AsRef<str>,
@@ -20,11 +23,7 @@ impl Telegram {
                 "text": format!("Subject: {}\n\n{}", subject.as_ref(), message.as_ref()),
             }))
             .send()
-            .await
-            .map_err(|err| UserError::InternalServerError {
-                message: "Error while sending Telegram notification".to_string(),
-                error: err.to_string(),
-            })?;
+            .await?;
 
         if !response.status().is_success() {
             return Err(UserError::InternalServerError {
@@ -32,22 +31,11 @@ impl Telegram {
                     "Error sending Telegram notification, request status {}",
                     response.status()
                 ),
-                error: response
-                    .text()
-                    .await
-                    .map_err(|err| UserError::InternalServerError {
-                        message: "Could not convert response text".to_string(),
-                        error: err.to_string(),
-                    })?,
-            });
+                error: response.text().await?,
+            }
+            .into());
         }
 
-        response
-            .text()
-            .await
-            .map_err(|err| UserError::InternalServerError {
-                message: "Could not convert response text".to_string(),
-                error: err.to_string(),
-            })
+        Ok(response.text().await?)
     }
 }

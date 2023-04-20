@@ -1,11 +1,10 @@
-use std::fmt;
-
 use actix_web::{
     error,
     http::{header::ContentType, StatusCode},
     HttpResponse,
 };
 use serde::{Deserialize, Serialize};
+use std::fmt;
 
 #[derive(Debug, Serialize)]
 #[serde(untagged)]
@@ -24,6 +23,8 @@ impl fmt::Display for UserError {
         )
     }
 }
+
+impl std::error::Error for UserError {}
 
 impl error::ResponseError for UserError {
     fn error_response(&self) -> HttpResponse {
