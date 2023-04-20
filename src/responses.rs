@@ -1,11 +1,10 @@
-use std::fmt;
-
 use actix_web::{
     error,
     http::{header::ContentType, StatusCode},
     HttpResponse,
 };
 use serde::{Deserialize, Serialize};
+use std::{env::VarError, fmt};
 
 #[derive(Debug, Serialize)]
 #[serde(untagged)]
@@ -22,6 +21,26 @@ impl fmt::Display for UserError {
             "{}",
             serde_json::to_string(&self).expect("Failed to serialize response")
         )
+    }
+}
+
+impl std::error::Error for UserError {}
+
+impl From<VarError> for UserError {
+    fn from(error: VarError) -> Self {
+        UserError::InternalServerError {
+            message: String::from("Error while getting environment variable"),
+            error: error.to_string(),
+        }
+    }
+}
+
+impl From<reqwest::Error> for UserError {
+    fn from(error: reqwest::Error) -> Self {
+        UserError::InternalServerError {
+            message: String::from("Error while sending request"),
+            error: error.to_string(),
+        }
     }
 }
 

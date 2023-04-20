@@ -1,9 +1,10 @@
-use crate::responses::UserError;
 use actix_web::web;
 use log::warn;
 use serde::Deserialize;
 use std::{env, net::SocketAddr};
 use unicode_segmentation::UnicodeSegmentation;
+
+use crate::responses::UserError;
 
 const DEFAULT_PORT: u16 = 8080;
 
@@ -18,33 +19,23 @@ pub struct EnvVars;
 
 impl EnvVars {
     pub fn get_telegram_bot_token() -> Result<String, UserError> {
-        Self::get_env_variable("TELEGRAM_BOT_TOKEN")
+        Ok(env::var("TELEGRAM_BOT_TOKEN")?)
     }
 
     pub fn get_telegram_chat_id() -> Result<String, UserError> {
-        Self::get_env_variable("TELEGRAM_CHAT_ID")
+        Ok(env::var("TELEGRAM_CHAT_ID")?)
     }
 
     pub fn get_sendgrid_api_key() -> Result<String, UserError> {
-        Self::get_env_variable("SENDGRID_API_KEY")
+        Ok(env::var("SENDGRID_API_KEY")?)
     }
 
     pub fn get_send_from_email() -> Result<String, UserError> {
-        Self::get_env_variable("SEND_FROM_EMAIL")
+        Ok(env::var("SEND_FROM_EMAIL")?)
     }
 
     pub fn get_send_to_email() -> Result<String, UserError> {
-        Self::get_env_variable("SEND_TO_EMAIL")
-    }
-
-    fn get_env_variable(env_variable: &str) -> Result<String, UserError> {
-        let error_message = "Required env variable not set";
-        let env_value = env::var(env_variable).map_err(|_| UserError::InternalServerError {
-            message: String::from(error_message),
-            error: String::from(error_message),
-        })?;
-
-        Ok(env_value)
+        Ok(env::var("SEND_TO_EMAIL")?)
     }
 }
 
