@@ -3,7 +3,7 @@ mod telegram;
 mod utils;
 
 use actix_cors::Cors;
-use actix_web::{http, middleware::Logger, web, App, HttpServer, Responder, Result};
+use actix_web::{http, middleware::Logger, web, App, HttpServer, Responder, Result, HttpRequest};
 use dotenvy::dotenv;
 use lambda_web::{is_running_on_lambda, run_actix_on_lambda, LambdaError};
 use log::{error, info, warn};
@@ -17,7 +17,8 @@ use crate::{
     telegram::Telegram,
 };
 
-async fn send_message(req_body: web::Json<EmailBody>) -> Result<impl Responder, UserError> {
+async fn send_message(req: HttpRequest, req_body: web::Json<EmailBody>) -> Result<impl Responder, UserError> {
+    info!("Client IP: {:?}", req.connection_info().peer_addr());
     utils::validate_body(&req_body).map_err(|error| {
         error!("Error while validating body: {error}");
         UserError::BadRequest {
