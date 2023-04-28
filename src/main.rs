@@ -17,7 +17,7 @@ use crate::{
     telegram::Telegram,
 };
 
-const REQUEST_TIMEOUT_SEC: u64 = 3;
+const REQUEST_TIMEOUT_SEC: u64 = 5;
 
 async fn send_message(
     req: HttpRequest,
