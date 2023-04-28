@@ -3,7 +3,7 @@ mod telegram;
 mod utils;
 
 use actix_cors::Cors;
-use actix_web::{http, middleware::Logger, web, App, HttpServer, Responder, Result, HttpRequest};
+use actix_web::{http, middleware::Logger, web, App, HttpRequest, HttpServer, Responder, Result};
 use dotenvy::dotenv;
 use lambda_web::{is_running_on_lambda, run_actix_on_lambda, LambdaError};
 use log::{error, info, warn};
@@ -17,7 +17,12 @@ use crate::{
     telegram::Telegram,
 };
 
-async fn send_message(req: HttpRequest, req_body: web::Json<EmailBody>) -> Result<impl Responder, UserError> {
+const REQUEST_TIMEOUT_SEC: u64 = 3;
+
+async fn send_message(
+    req: HttpRequest,
+    req_body: web::Json<EmailBody>,
+) -> Result<impl Responder, UserError> {
     info!("Client IP: {:?}", req.connection_info().peer_addr());
     utils::validate_body(&req_body).map_err(|error| {
         error!("Error while validating body: {error}");
@@ -43,6 +48,7 @@ async fn send_message(req: HttpRequest, req_body: web::Json<EmailBody>) -> Resul
         &req_body.subject,
         &message_body,
     )
+    .set_request_timeout(std::time::Duration::from_secs(REQUEST_TIMEOUT_SEC))
     .build()
     .map_err(|err| {
         error!("Error while building Sendgrid: {err}");
@@ -60,7 +66,10 @@ async fn send_message(req: HttpRequest, req_body: web::Json<EmailBody>) -> Resul
     let sent_response = format!(
         "Email response -> {} | Telegram response -> {}",
         email_response.unwrap_or(String::from("Error while sending email")),
-        telegram_response?
+        telegram_response.map_err(|_| UserError::InternalServerError {
+            message: String::from("Error while sending Telegram notification"),
+            error: String::from("Something went wrong while sending Telegram notification"),
+        })?
     );
 
     info!("Message sent with subject: {}", req_body.subject);
@@ -119,7 +128,7 @@ async fn main() -> Result<(), LambdaError> {
     } else {
         // Run on a normal HTTP server
         HttpServer::new(factory)
-            .bind(&get_socket_addr())?
+            .bind(get_socket_addr())?
             .run()
             .await?;
     }

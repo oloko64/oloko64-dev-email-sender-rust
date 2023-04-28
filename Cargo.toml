@@ -18,7 +18,7 @@ actix-web = "4.3.1"
 dotenvy = "0.15.7"
 lambda-web = { version = "0.2.1", features = ["actix4"] }
 log = "0.4.17"
-sendgrid_thin = { version = "0.4.4", default-features = false }
+sendgrid_thin = { version = "0.4.5", default-features = false }
 sentry = "0.31.0"
 serde = { version = "1.0.160", features = ["derive"] }
 tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
