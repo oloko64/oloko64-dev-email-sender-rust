@@ -1,4 +1,4 @@
-use crate::{responses::UserError, utils::EnvVars};
+use crate::{responses::UserError, utils::EnvVars, REQUEST_TIMEOUT_SEC};
 
 pub struct Telegram;
 
@@ -11,7 +11,11 @@ impl Telegram {
         let bot_token = EnvVars::get_telegram_bot_token()?;
         let chat_id = EnvVars::get_telegram_chat_id()?;
 
-        let response = reqwest::Client::new()
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(REQUEST_TIMEOUT_SEC))
+            .build()?;
+
+        let response = client
             .post(format!(
                 "https://api.telegram.org/bot{bot_token}/sendMessage"
             ))
