@@ -36,6 +36,6 @@ impl Telegram {
             });
         }
 
-        Ok(response.text().await?)
+        Ok(String::from("Telegram notification sent successfully"))
     }
 }
