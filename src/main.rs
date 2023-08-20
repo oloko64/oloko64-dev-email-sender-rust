@@ -28,7 +28,7 @@ async fn send_message(
         error!("Error while validating body: {error}");
         UserError::BadRequest {
             message: String::from("Error while validating body"),
-            error,
+            error: error.to_string(),
         }
     })?;
 
