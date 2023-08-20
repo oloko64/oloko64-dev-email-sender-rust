@@ -1,6 +1,6 @@
 [package]
 name = "email-sender-rust"
-version = "0.2.7"
+version = "0.2.710"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -12,18 +12,18 @@ codegen-units = 1
 
 [dependencies]
 # This openssl with "vendored" is necessary because the default OpenSSL library is not built for the target architecture (x86_64-unknown-linux-musl)
-openssl = { version = "0.10.53", features = ["vendored"] }
+openssl = { version = "0.10.56", features = ["vendored"] }
 actix-cors = "0.6.4"
 actix-web = "4.3.1"
 dotenvy = "0.15.7"
 lambda-web = { version = "0.2.1", features = ["actix4"] }
-log = "0.4.18"
+log = "0.4.20"
 sendgrid_thin = { version = "0.4.5", default-features = false }
-sentry = "0.31.3"
-serde = { version = "1.0.163", features = ["derive"] }
+sentry = "0.31.5"
+serde = { version = "1.0.183", features = ["derive"] }
 tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
-serde_json = "1.0.96"
-sentry-actix = "0.31.3"
+serde_json = "1.0.105"
+sentry-actix = "0.31.5"
 reqwest = "0.11.18"
 unicode-segmentation = "1.10.1"
-tokio = "1.28.2"
+tokio = "1.32.0"

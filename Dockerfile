@@ -18,4 +18,7 @@ COPY --from=builder /app/target/release/email-sender-rust /app/email-sender-rust
 WORKDIR /app
 
 # Run the web service on container startup.
-CMD ["./email-sender-rust"]
+ENTRYPOINT ["./email-sender-rust"]
+
+# Port 8080 is the default port for HTTP functions.
+EXPOSE 8080
