@@ -14,6 +14,30 @@ pub enum UserError {
     InternalServerError { message: String, error: String },
 }
 
+impl UserError {
+    // pub fn bad_request<T, U>(message: T, error: U) -> Self
+    // where
+    //     T: Into<String>,
+    //     U: Into<String>,
+    // {
+    //     UserError::BadRequest {
+    //         message: message.into(),
+    //         error: error.into(),
+    //     }
+    // }
+
+    pub fn internal_server_error<T, U>(message: T, error: U) -> Self
+    where
+        T: Into<String>,
+        U: Into<String>,
+    {
+        UserError::InternalServerError {
+            message: message.into(),
+            error: error.into(),
+        }
+    }
+}
+
 impl fmt::Display for UserError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
@@ -35,10 +59,19 @@ impl From<VarError> for UserError {
     }
 }
 
+impl From<&str> for UserError {
+    fn from(error: &str) -> Self {
+        UserError::BadRequest {
+            message: String::from(error),
+            error: String::from(error),
+        }
+    }
+}
+
 impl From<reqwest::Error> for UserError {
     fn from(error: reqwest::Error) -> Self {
         UserError::InternalServerError {
-            message: String::from("Error while sending request"),
+            message: String::from("Request error"),
             error: error.to_string(),
         }
     }

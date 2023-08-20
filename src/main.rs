@@ -24,13 +24,7 @@ async fn send_message(
     req_body: web::Json<EmailBody>,
 ) -> Result<impl Responder, UserError> {
     info!("Client IP: {:?}", req.connection_info().peer_addr());
-    utils::validate_body(&req_body).map_err(|error| {
-        error!("Error while validating body: {error}");
-        UserError::BadRequest {
-            message: String::from("Error while validating body"),
-            error: error.to_string(),
-        }
-    })?;
+    utils::validate_body(&req_body)?;
 
     let sendgrid_api_key = EnvVars::get_sendgrid_api_key()?;
     let from_email = EnvVars::get_send_from_email()?;
@@ -52,10 +46,7 @@ async fn send_message(
     .build()
     .map_err(|err| {
         error!("Error while building Sendgrid: {err}");
-        UserError::InternalServerError {
-            message: String::from("Error while building Sendgrid"),
-            error: err.to_string(),
-        }
+        UserError::internal_server_error("Error while building Sendgrid", err.to_string())
     })?;
 
     let (telegram_response, email_response) = tokio::join!(
@@ -66,10 +57,10 @@ async fn send_message(
     let sent_response = format!(
         "Email response -> {} | Telegram response -> {}",
         email_response.unwrap_or(String::from("Error while sending email")),
-        telegram_response.map_err(|_| UserError::InternalServerError {
-            message: String::from("Error while sending Telegram notification"),
-            error: String::from("Something went wrong while sending Telegram notification"),
-        })?
+        telegram_response.map_err(|_| UserError::internal_server_error(
+            "Error while sending Telegram notification",
+            "Something went wrong while sending Telegram notification"
+        ))?
     );
 
     info!("Message sent with subject: {}", req_body.subject);
@@ -173,7 +164,7 @@ mod tests {
         assert_eq!(
             resp,
             Bytes::from_static(
-                br#"{"message":"Error while validating body","error":"Contact cannot be empty"}"#
+                br#"{"message":"Contact cannot be empty","error":"Contact cannot be empty"}"#
             )
         );
     }
@@ -193,7 +184,7 @@ mod tests {
         assert_eq!(
             resp,
             Bytes::from_static(
-                br#"{"message":"Error while validating body","error":"Subject cannot be empty"}"#
+                br#"{"message":"Subject cannot be empty","error":"Subject cannot be empty"}"#
             )
         );
     }
@@ -213,7 +204,7 @@ mod tests {
         assert_eq!(
             resp,
             Bytes::from_static(
-                br#"{"message":"Error while validating body","error":"Body cannot be empty"}"#
+                br#"{"message":"Body cannot be empty","error":"Body cannot be empty"}"#
             )
         );
     }
@@ -234,7 +225,7 @@ mod tests {
 
         assert_eq!(
             resp,
-            Bytes::from_static(br#"{"message":"Error while validating body","error":"Contact cannot be longer than 50 characters"}"#)
+            Bytes::from_static(br#"{"message":"Contact cannot be longer than 50 characters","error":"Contact cannot be longer than 50 characters"}"#)
         );
     }
 
@@ -254,7 +245,7 @@ mod tests {
 
         assert_eq!(
             resp,
-            Bytes::from_static(br#"{"message":"Error while validating body","error":"Subject cannot be longer than 50 characters"}"#)
+            Bytes::from_static(br#"{"message":"Subject cannot be longer than 50 characters","error":"Subject cannot be longer than 50 characters"}"#)
         );
     }
 }
