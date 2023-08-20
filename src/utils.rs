@@ -39,32 +39,22 @@ impl EnvVars {
     }
 }
 
-pub fn validate_body(body: &web::Json<EmailBody>) -> Result<(), String> {
-    if body.contact.is_empty() {
-        return Err(String::from("Contact cannot be empty"));
+pub fn validate_body(body: &web::Json<EmailBody>) -> Result<(), &'static str> {
+    match body {
+        _ if body.contact.is_empty() => Err("Contact cannot be empty"),
+        _ if body.subject.is_empty() => Err("Subject cannot be empty"),
+        _ if body.body.is_empty() => Err("Body cannot be empty"),
+        _ if body.contact.graphemes(true).count() > 50 => {
+            Err("Contact cannot be longer than 50 characters")
+        }
+        _ if body.subject.graphemes(true).count() > 50 => {
+            Err("Subject cannot be longer than 50 characters")
+        }
+        _ if body.body.graphemes(true).count() > 2000 => {
+            Err("Body cannot be longer than 2000 characters")
+        }
+        _ => Ok(()),
     }
-
-    if body.subject.is_empty() {
-        return Err(String::from("Subject cannot be empty"));
-    }
-
-    if body.body.is_empty() {
-        return Err(String::from("Body cannot be empty"));
-    }
-
-    if body.contact.graphemes(true).count() > 50 {
-        return Err(String::from("Contact cannot be longer than 50 characters"));
-    }
-
-    if body.subject.graphemes(true).count() > 50 {
-        return Err(String::from("Subject cannot be longer than 50 characters"));
-    }
-
-    if body.body.graphemes(true).count() > 2000 {
-        return Err(String::from("Body cannot be longer than 2000 characters"));
-    }
-
-    Ok(())
 }
 
 pub fn get_socket_addr() -> SocketAddr {
