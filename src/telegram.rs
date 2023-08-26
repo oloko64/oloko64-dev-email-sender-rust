@@ -1,4 +1,4 @@
-use crate::{responses::UserError, utils::EnvVars, REQUEST_TIMEOUT_SEC};
+use crate::{responses::UserError, utils::config, REQUEST_TIMEOUT_SEC};
 
 pub struct Telegram;
 
@@ -8,8 +8,8 @@ impl Telegram {
         T: AsRef<str>,
         U: AsRef<str>,
     {
-        let bot_token = EnvVars::get_telegram_bot_token()?;
-        let chat_id = EnvVars::get_telegram_chat_id()?;
+        let bot_token = config().get_telegram_bot_token();
+        let chat_id = config().get_telegram_chat_id();
 
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(REQUEST_TIMEOUT_SEC))

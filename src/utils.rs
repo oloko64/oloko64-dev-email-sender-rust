@@ -1,10 +1,12 @@
 use actix_web::web;
 use log::warn;
 use serde::Deserialize;
-use std::{env, net::SocketAddr};
+use std::{
+    env::{self, VarError},
+    net::SocketAddr,
+    sync::OnceLock,
+};
 use unicode_segmentation::UnicodeSegmentation;
-
-use crate::responses::UserError;
 
 const DEFAULT_PORT: u16 = 8080;
 
@@ -15,27 +17,53 @@ pub struct EmailBody {
     pub body: String,
 }
 
-pub struct EnvVars;
+pub fn config() -> &'static Config {
+    static INSTANCE: OnceLock<Config> = OnceLock::new();
 
-impl EnvVars {
-    pub fn get_telegram_bot_token() -> Result<String, UserError> {
-        Ok(env::var("TELEGRAM_BOT_TOKEN")?)
+    INSTANCE.get_or_init(|| {
+        Config::load_from_env().unwrap_or_else(|err| {
+            panic!("Error while loading config from environment variables: {err}")
+        })
+    })
+}
+
+pub struct Config {
+    telegram_bot_token: String,
+    telegram_chat_id: String,
+    sendgrid_api_key: String,
+    send_from_email: String,
+    send_to_email: String,
+}
+
+impl Config {
+    fn load_from_env() -> Result<Config, VarError> {
+        Ok(Config {
+            telegram_bot_token: env::var("TELEGRAM_BOT_TOKEN")?,
+            telegram_chat_id: env::var("TELEGRAM_CHAT_ID")?,
+            sendgrid_api_key: env::var("SENDGRID_API_KEY")?,
+            send_from_email: env::var("SEND_FROM_EMAIL")?,
+            send_to_email: env::var("SEND_TO_EMAIL")?,
+        })
     }
 
-    pub fn get_telegram_chat_id() -> Result<String, UserError> {
-        Ok(env::var("TELEGRAM_CHAT_ID")?)
+    pub fn get_telegram_bot_token(&self) -> &str {
+        &self.telegram_bot_token
     }
 
-    pub fn get_sendgrid_api_key() -> Result<String, UserError> {
-        Ok(env::var("SENDGRID_API_KEY")?)
+    pub fn get_telegram_chat_id(&self) -> &str {
+        &self.telegram_chat_id
     }
 
-    pub fn get_send_from_email() -> Result<String, UserError> {
-        Ok(env::var("SEND_FROM_EMAIL")?)
+    pub fn get_sendgrid_api_key(&self) -> &str {
+        &self.sendgrid_api_key
     }
 
-    pub fn get_send_to_email() -> Result<String, UserError> {
-        Ok(env::var("SEND_TO_EMAIL")?)
+    pub fn get_send_from_email(&self) -> &str {
+        &self.send_from_email
+    }
+
+    pub fn get_send_to_email(&self) -> &str {
+        &self.send_to_email
     }
 }
 

@@ -10,7 +10,7 @@ use log::{error, info, warn};
 use sendgrid_thin::Sendgrid;
 use std::env::{self, set_var};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
-use utils::{get_socket_addr, EmailBody, EnvVars};
+use utils::{config, get_socket_addr, EmailBody};
 
 use crate::{
     responses::{EmailSentResponse, UserError},
@@ -26,9 +26,9 @@ async fn send_message(
     info!("Client IP: {:?}", req.connection_info().peer_addr());
     utils::validate_body(&req_body)?;
 
-    let sendgrid_api_key = EnvVars::get_sendgrid_api_key()?;
-    let from_email = EnvVars::get_send_from_email()?;
-    let to_email = EnvVars::get_send_to_email()?;
+    let sendgrid_api_key = config().get_sendgrid_api_key();
+    let from_email = config().get_send_from_email();
+    let to_email = config().get_send_to_email();
 
     let message_body = format!(
         "Contact: {}\n\nMessage: {}",
