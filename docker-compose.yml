@@ -2,7 +2,9 @@ version: '3'
 
 services:
   email-sender-app:
-    build: .
+    build:
+      context: .
+      target: final
     image: oloko64/email-sender-rust
     ports:
       - "8080:8080"
