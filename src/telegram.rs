@@ -1,9 +1,9 @@
-use crate::{responses::UserError, utils::config, REQUEST_TIMEOUT_SEC};
+use crate::{responses::ApiError, utils::config, REQUEST_TIMEOUT_SEC};
 
 pub struct Telegram;
 
 impl Telegram {
-    pub async fn send_notification<T, U>(subject: U, message: T) -> Result<String, UserError>
+    pub async fn send_notification<T, U>(subject: U, message: T) -> Result<String, ApiError>
     where
         T: AsRef<str>,
         U: AsRef<str>,
@@ -27,7 +27,7 @@ impl Telegram {
             .await?;
 
         if !response.status().is_success() {
-            return Err(UserError::InternalServerError {
+            return Err(ApiError::InternalServerError {
                 message: format!(
                     "Error sending Telegram notification, request status {}",
                     response.status()

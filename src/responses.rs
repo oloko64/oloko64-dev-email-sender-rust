@@ -1,20 +1,17 @@
-use actix_web::{
-    error,
-    http::{header::ContentType, StatusCode},
-    HttpResponse,
-};
+use axum::{http::StatusCode, response::IntoResponse, Json};
+use sendgrid_thin::SendgridError;
 use serde::{Deserialize, Serialize};
 use std::{env::VarError, fmt};
 
 #[derive(Debug, Serialize)]
 #[serde(untagged)]
-pub enum UserError {
+pub enum ApiError {
     BadRequest { message: String, error: String },
 
     InternalServerError { message: String, error: String },
 }
 
-impl UserError {
+impl ApiError {
     // pub fn bad_request<T, U>(message: T, error: U) -> Self
     // where
     //     T: Into<String>,
@@ -31,14 +28,14 @@ impl UserError {
         T: Into<String>,
         U: Into<String>,
     {
-        UserError::InternalServerError {
+        ApiError::InternalServerError {
             message: message.into(),
             error: error.into(),
         }
     }
 }
 
-impl fmt::Display for UserError {
+impl fmt::Display for ApiError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -48,45 +45,51 @@ impl fmt::Display for UserError {
     }
 }
 
-impl std::error::Error for UserError {}
+impl std::error::Error for ApiError {}
 
-impl From<VarError> for UserError {
+impl From<VarError> for ApiError {
     fn from(error: VarError) -> Self {
-        UserError::InternalServerError {
+        ApiError::InternalServerError {
             message: String::from("Error while getting environment variable"),
             error: error.to_string(),
         }
     }
 }
 
-impl From<&str> for UserError {
+impl From<&str> for ApiError {
     fn from(error: &str) -> Self {
-        UserError::BadRequest {
+        ApiError::BadRequest {
             message: String::from(error),
             error: String::from(error),
         }
     }
 }
 
-impl From<reqwest::Error> for UserError {
+impl From<reqwest::Error> for ApiError {
     fn from(error: reqwest::Error) -> Self {
-        UserError::InternalServerError {
+        ApiError::InternalServerError {
             message: String::from("Request error"),
             error: error.to_string(),
         }
     }
 }
 
-impl error::ResponseError for UserError {
-    fn error_response(&self) -> HttpResponse {
-        HttpResponse::build(self.status_code())
-            .insert_header(ContentType::json())
-            .body(self.to_string())
+impl From<SendgridError> for ApiError {
+    fn from(error: SendgridError) -> Self {
+        ApiError::InternalServerError {
+            message: String::from("Error with email"),
+            error: error.to_string(),
+        }
     }
-    fn status_code(&self) -> StatusCode {
-        match *self {
-            UserError::BadRequest { .. } => StatusCode::BAD_REQUEST,
-            UserError::InternalServerError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+}
+
+impl IntoResponse for ApiError {
+    fn into_response(self) -> axum::response::Response {
+        match self {
+            ApiError::InternalServerError { .. } => {
+                (StatusCode::INTERNAL_SERVER_ERROR).into_response()
+            }
+            ApiError::BadRequest { .. } => (StatusCode::BAD_REQUEST, Json(self)).into_response(),
         }
     }
 }
@@ -97,11 +100,11 @@ pub struct EmailSentResponse {
 }
 
 impl EmailSentResponse {
-    pub fn ok<T>(message: T) -> HttpResponse
+    pub fn ok<T>(message: T) -> axum::response::Json<EmailSentResponse>
     where
         T: Into<String>,
     {
-        HttpResponse::Ok().json(EmailSentResponse {
+        axum::response::Json(EmailSentResponse {
             message: message.into(),
         })
     }

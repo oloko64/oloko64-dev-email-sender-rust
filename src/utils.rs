@@ -1,14 +1,13 @@
-use actix_web::web;
-use log::warn;
 use serde::Deserialize;
 use std::{
     env::{self, VarError},
     net::SocketAddr,
     sync::OnceLock,
 };
+use tracing::warn;
 use unicode_segmentation::UnicodeSegmentation;
 
-const DEFAULT_PORT: u16 = 8080;
+const PORT: u16 = 3000;
 
 #[derive(Deserialize)]
 pub struct EmailBody {
@@ -67,7 +66,7 @@ impl Config {
     }
 }
 
-pub fn validate_body(body: &web::Json<EmailBody>) -> Result<(), &'static str> {
+pub fn validate_body(body: &EmailBody) -> Result<(), &'static str> {
     match body {
         _ if body.contact.is_empty() => Err("Contact cannot be empty"),
         _ if body.subject.is_empty() => Err("Subject cannot be empty"),
@@ -90,13 +89,13 @@ pub fn get_socket_addr() -> SocketAddr {
         [0, 0, 0, 0],
         env::var("PORT")
             .unwrap_or_else(|_| {
-                warn!("PORT not found .env file, using default port: {DEFAULT_PORT}");
-                DEFAULT_PORT.to_string()
+                warn!("PORT not found .env file, using default port: {PORT}");
+                PORT.to_string()
             })
             .parse::<u16>()
             .unwrap_or_else(|_| {
-                warn!("PORT is not a valid port number, using default port: {DEFAULT_PORT}");
-                DEFAULT_PORT
+                warn!("PORT is not a valid port number, using default port: {PORT}");
+                PORT
             }),
     ))
 }
