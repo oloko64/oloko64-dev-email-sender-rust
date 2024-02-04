@@ -1,3 +1,5 @@
+use serde_json::json;
+
 use crate::{responses::ApiError, utils::config, REQUEST_TIMEOUT_SEC};
 
 pub struct Telegram;
@@ -15,25 +17,27 @@ impl Telegram {
             .timeout(std::time::Duration::from_secs(REQUEST_TIMEOUT_SEC))
             .build()?;
 
+        let body = json!({
+            "chat_id": chat_id,
+            "text": format!("Subject: {}\n\n{}", subject.as_ref(), message.as_ref()),
+        });
+
         let response = client
             .post(format!(
                 "https://api.telegram.org/bot{bot_token}/sendMessage"
             ))
-            .json(&serde_json::json!({
-                "chat_id": chat_id,
-                "text": format!("Subject: {}\n\n{}", subject.as_ref(), message.as_ref()),
-            }))
+            .json(&body)
             .send()
             .await?;
 
         if !response.status().is_success() {
-            return Err(ApiError::InternalServerError {
-                message: format!(
+            return Err(ApiError::internal_server_error(
+                format!(
                     "Error sending Telegram notification, request status {}",
                     response.status()
                 ),
-                error: response.text().await?,
-            });
+                response.text().await?,
+            ));
         }
 
         Ok(String::from("Telegram notification sent successfully"))

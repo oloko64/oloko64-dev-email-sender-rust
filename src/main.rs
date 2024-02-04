@@ -1,78 +1,29 @@
 mod responses;
+mod routes;
 mod telegram;
 mod utils;
 
 use axum::{
-    http::{header, Method},
+    http::{header, HeaderValue, Method},
     routing::{get, post},
-    Json, Router,
+    Router,
 };
 use dotenvy::dotenv;
 use lambda_http::Error;
 use lambda_runtime::tower::ServiceBuilder;
-use sendgrid_thin::Sendgrid;
-use std::{
-    env::{self, set_var},
-    time::Duration,
-};
+use std::env::{self, set_var};
 use tower_http::{
-    catch_panic::CatchPanicLayer,
-    cors::{Any, CorsLayer},
-    normalize_path::NormalizePathLayer,
+    catch_panic::CatchPanicLayer, cors::CorsLayer, normalize_path::NormalizePathLayer,
     trace::TraceLayer,
 };
 use tracing::{info, warn};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
-use utils::{config, get_socket_addr, EmailBody};
+use utils::get_socket_addr;
 
 #[cfg(not(debug_assertions))]
 use lambda_http::run;
 
-use crate::{
-    responses::{ApiError, EmailSentResponse},
-    telegram::Telegram,
-};
-
 const REQUEST_TIMEOUT_SEC: u64 = 5;
-
-async fn send_message(Json(req_body): Json<EmailBody>) -> Result<EmailSentResponse, ApiError> {
-    utils::validate_body(&req_body)?;
-
-    let sendgrid_api_key = config().get_sendgrid_api_key();
-    let from_email = config().get_send_from_email();
-    let to_email = config().get_send_to_email();
-
-    let message_body = format!(
-        "Contact: {}\n\nMessage: {}",
-        req_body.contact, req_body.body
-    );
-
-    let sendgrid = Sendgrid::builder(
-        sendgrid_api_key,
-        from_email,
-        [to_email],
-        &req_body.subject,
-        &message_body,
-    )
-    .set_request_timeout(Duration::from_secs(REQUEST_TIMEOUT_SEC))
-    .build()?;
-
-    let (telegram_response, email_response) = tokio::join!(
-        Telegram::send_notification(&req_body.subject, message_body),
-        sendgrid.send()
-    );
-
-    let sent_response = format!(
-        "Email response -> {} | Telegram response -> {}",
-        email_response.unwrap_or(String::from("Error while sending email")),
-        telegram_response.map_err(|_| ApiError::internal_server_error(
-            "Error while sending Telegram notification",
-            "Something went wrong while sending Telegram notification"
-        ))?
-    );
-
-    Ok(EmailSentResponse::new(sent_response))
-}
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
@@ -107,7 +58,7 @@ async fn main() -> Result<(), Error> {
     ));
 
     let cors = CorsLayer::new()
-        .allow_origin(Any)
+        .allow_origin(HeaderValue::from_static("https://www.oloko64.dev"))
         .allow_methods([Method::GET, Method::POST])
         .allow_headers([header::CONTENT_TYPE]);
 
@@ -119,7 +70,7 @@ async fn main() -> Result<(), Error> {
 
     let app = Router::new()
         .route("/", get(|| async { "Email sender" }))
-        .route("/send-message", post(send_message))
+        .route("/send-message", post(routes::send_message))
         .layer(middlewares);
 
     #[cfg(debug_assertions)]

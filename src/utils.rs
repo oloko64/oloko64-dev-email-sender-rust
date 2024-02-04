@@ -67,21 +67,31 @@ impl Config {
 }
 
 pub fn validate_body(body: &EmailBody) -> Result<(), &'static str> {
-    match body {
-        _ if body.contact.is_empty() => Err("Contact cannot be empty"),
-        _ if body.subject.is_empty() => Err("Subject cannot be empty"),
-        _ if body.body.is_empty() => Err("Body cannot be empty"),
-        _ if body.contact.graphemes(true).count() > 50 => {
-            Err("Contact cannot be longer than 50 characters")
-        }
-        _ if body.subject.graphemes(true).count() > 50 => {
-            Err("Subject cannot be longer than 50 characters")
-        }
-        _ if body.body.graphemes(true).count() > 2000 => {
-            Err("Body cannot be longer than 2000 characters")
-        }
-        _ => Ok(()),
+    if body.contact.is_empty() {
+        return Err("Contact cannot be empty");
     }
+
+    if body.subject.is_empty() {
+        return Err("Subject cannot be empty");
+    }
+
+    if body.body.is_empty() {
+        return Err("Body cannot be empty");
+    }
+
+    if body.contact.graphemes(true).count() > 50 {
+        return Err("Contact cannot be longer than 50 characters");
+    }
+
+    if body.subject.graphemes(true).count() > 50 {
+        return Err("Subject cannot be longer than 50 characters");
+    }
+
+    if body.body.graphemes(true).count() > 2000 {
+        return Err("Body cannot be longer than 2000 characters");
+    }
+
+    Ok(())
 }
 
 pub fn get_socket_addr() -> SocketAddr {
@@ -98,4 +108,95 @@ pub fn get_socket_addr() -> SocketAddr {
                 PORT
             }),
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validate_body_should_return_ok_when_valid() {
+        let body = EmailBody {
+            contact: String::from("Contact"),
+            subject: String::from("Subject"),
+            body: String::from("Body"),
+        };
+
+        assert_eq!(validate_body(&body), Ok(()));
+    }
+
+    #[test]
+    fn validate_body_should_return_error_when_contact_is_empty() {
+        let body = EmailBody {
+            contact: String::new(),
+            subject: String::from("Subject"),
+            body: String::from("Body"),
+        };
+
+        assert_eq!(validate_body(&body), Err("Contact cannot be empty"));
+    }
+
+    #[test]
+    fn validate_body_should_return_error_when_subject_is_empty() {
+        let body = EmailBody {
+            contact: String::from("Contact"),
+            subject: String::new(),
+            body: String::from("Body"),
+        };
+
+        assert_eq!(validate_body(&body), Err("Subject cannot be empty"));
+    }
+
+    #[test]
+    fn validate_body_should_return_error_when_body_is_empty() {
+        let body = EmailBody {
+            contact: String::from("Contact"),
+            subject: String::from("Subject"),
+            body: String::new(),
+        };
+
+        assert_eq!(validate_body(&body), Err("Body cannot be empty"));
+    }
+
+    #[test]
+    fn validate_body_should_return_error_when_contact_is_longer_than_50_characters() {
+        let body = EmailBody {
+            contact: "a".repeat(51),
+            subject: String::from("Subject"),
+            body: String::from("Body"),
+        };
+
+        assert_eq!(
+            validate_body(&body),
+            Err("Contact cannot be longer than 50 characters")
+        );
+    }
+
+    #[test]
+    fn validate_body_should_return_error_when_subject_is_longer_than_50_characters() {
+        let body = EmailBody {
+            contact: String::from("Contact"),
+            subject: "a".repeat(51),
+            body: String::from("Body"),
+        };
+
+        assert_eq!(
+            validate_body(&body),
+            Err("Subject cannot be longer than 50 characters")
+        );
+    }
+
+    #[test]
+    fn validate_body_should_return_error_when_body_is_longer_than_2000_characters() {
+        let body = EmailBody {
+            contact: String::from("Contact"),
+            subject: String::from("Subject"),
+            body: "a".repeat(2001),
+        };
+
+        assert_eq!(
+            validate_body(&body),
+            Err("Body cannot be longer than 2000 characters")
+        );
+    }
 }
