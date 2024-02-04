@@ -11,6 +11,8 @@ lto = "thin"
 strip = true
 
 [dependencies]
+# This openssl with "vendored" is necessary because the default OpenSSL library is not built for the target architecture (x86_64-unknown-linux-musl)
+openssl = { version = "0.10.63", features = ["vendored"] }
 dotenvy = "0.15.7"
 sendgrid_thin = { version = "0.4.5", default-features = false }
 sentry = "0.32.2"
