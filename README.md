@@ -17,3 +17,4 @@ zip lambda.zip bootstrap
 ```
 
 [AWS Docs](https://docs.aws.amazon.com/sdk-for-rust/latest/dg/lambda.html)
+[AWS Example](https://github.com/awslabs/aws-lambda-rust-runtime/tree/main/examples/http-axum)

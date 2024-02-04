@@ -1,84 +1,49 @@
 mod responses;
+mod routes;
 mod telegram;
 mod utils;
 
-use actix_cors::Cors;
-use actix_web::{http, middleware::Logger, web, App, HttpRequest, HttpServer, Responder, Result};
-use dotenvy::dotenv;
-use lambda_web::{is_running_on_lambda, run_actix_on_lambda, LambdaError};
-use log::{error, info, warn};
-use sendgrid_thin::Sendgrid;
-use std::env::{self, set_var};
-use tracing_subscriber::{fmt, prelude::*, EnvFilter};
-use utils::{config, get_socket_addr, EmailBody};
-
-use crate::{
-    responses::{EmailSentResponse, UserError},
-    telegram::Telegram,
+use axum::{
+    http::{header, HeaderValue, Method},
+    routing::{get, post},
+    Router,
 };
+use dotenvy::dotenv;
+use lambda_http::Error;
+use lambda_runtime::tower::ServiceBuilder;
+use std::env::{self, set_var};
+use tower_http::{
+    catch_panic::CatchPanicLayer, cors::CorsLayer, normalize_path::NormalizePathLayer,
+    trace::TraceLayer,
+};
+use tracing::{info, warn};
+use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+use utils::get_socket_addr;
+
+#[cfg(not(debug_assertions))]
+use lambda_http::run;
 
 const REQUEST_TIMEOUT_SEC: u64 = 5;
 
-async fn send_message(
-    req: HttpRequest,
-    req_body: web::Json<EmailBody>,
-) -> Result<impl Responder, UserError> {
-    info!("Client IP: {:?}", req.connection_info().peer_addr());
-    utils::validate_body(&req_body)?;
-
-    let sendgrid_api_key = config().get_sendgrid_api_key();
-    let from_email = config().get_send_from_email();
-    let to_email = config().get_send_to_email();
-
-    let message_body = format!(
-        "Contact: {}\n\nMessage: {}",
-        req_body.contact, req_body.body
-    );
-
-    let sendgrid = Sendgrid::builder(
-        sendgrid_api_key,
-        from_email,
-        [to_email],
-        &req_body.subject,
-        &message_body,
-    )
-    .set_request_timeout(std::time::Duration::from_secs(REQUEST_TIMEOUT_SEC))
-    .build()
-    .map_err(|err| {
-        error!("Error while building Sendgrid: {err}");
-        UserError::internal_server_error("Error while building Sendgrid", err.to_string())
-    })?;
-
-    let (telegram_response, email_response) = tokio::join!(
-        Telegram::send_notification(&req_body.subject, message_body),
-        sendgrid.send()
-    );
-
-    let sent_response = format!(
-        "Email response -> {} | Telegram response -> {}",
-        email_response.unwrap_or(String::from("Error while sending email")),
-        telegram_response.map_err(|_| UserError::internal_server_error(
-            "Error while sending Telegram notification",
-            "Something went wrong while sending Telegram notification"
-        ))?
-    );
-
-    info!("Message sent with subject: {}", req_body.subject);
-    info!("{}", &sent_response);
-    Ok(EmailSentResponse::ok(sent_response))
-}
-
-#[actix_web::main]
-async fn main() -> Result<(), LambdaError> {
+#[tokio::main]
+async fn main() -> Result<(), Error> {
     dotenv().ok();
-    if env::var("RUST_LOG").is_err() {
-        set_var("RUST_LOG", "info");
-    }
+
+    // If you use API Gateway stages, the Rust Runtime will include the stage name
+    // as part of the path that your application receives.
+    // Setting the following environment variable, you can remove the stage from the path.
+    // This variable only applies to API Gateway stages,
+    // you can remove it if you don't use them.
+    // i.e with: `GET /test-stage/todo/id/123` without: `GET /todo/id/123`
+    set_var("AWS_LAMBDA_HTTP_IGNORE_STAGE_IN_PATH", "true");
 
     tracing_subscriber::registry()
-        .with(fmt::layer().with_ansi(false))
-        .with(EnvFilter::from_default_env())
+        .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
+        .with(fmt::layer().with_target(false).with_ansi(false))
         .init();
+
+    info!("App version: v{}", env!("CARGO_PKG_VERSION"));
+
     let sentry_api_key = env::var("SENTRY_API_KEY").unwrap_or_else(|_| {
         warn!("Sentry API Key not found, not reporting errors to Sentry");
         String::new()
@@ -92,160 +57,37 @@ async fn main() -> Result<(), LambdaError> {
         },
     ));
 
-    let factory = move || {
-        App::new()
-            .wrap(sentry_actix::Sentry::new())
-            .wrap(Logger::default())
-            .wrap(
-                Cors::default()
-                    .allowed_origin("https://www.oloko64.dev")
-                    .allowed_header(http::header::CONTENT_TYPE)
-                    .allowed_methods(vec!["GET", "POST"]),
-            )
-            .route(
-                "/",
-                web::get().to(|| async {
-                    "My custom email service for my website using Actix-Web and SendGrid"
-                }),
-            )
-            .route("/send-message", web::post().to(send_message))
-    };
+    let cors = CorsLayer::new()
+        .allow_origin(HeaderValue::from_static("https://www.oloko64.dev"))
+        .allow_methods([Method::GET, Method::POST])
+        .allow_headers([header::CONTENT_TYPE]);
 
-    info!("App version: v{}", env!("CARGO_PKG_VERSION"));
+    let middlewares = ServiceBuilder::new()
+        .layer(TraceLayer::new_for_http())
+        .layer(cors)
+        .layer(CatchPanicLayer::new())
+        .layer(NormalizePathLayer::trim_trailing_slash());
 
-    if is_running_on_lambda() {
-        // Run on AWS Lambda
-        run_actix_on_lambda(factory).await?;
-    } else {
-        // Run on a normal HTTP server
-        HttpServer::new(factory)
-            .bind(get_socket_addr())?
-            .run()
-            .await?;
+    let app = Router::new()
+        .route("/", get(|| async { "Email sender" }))
+        .route("/send-message", post(routes::send_message))
+        .layer(middlewares);
+
+    #[cfg(debug_assertions)]
+    {
+        let socket_addr = get_socket_addr();
+        let tcp_listener = tokio::net::TcpListener::bind(&socket_addr).await.unwrap();
+        info!("Listening on {}", socket_addr);
+        axum::serve(tcp_listener, app.into_make_service())
+            .await
+            .unwrap();
+    }
+
+    #[cfg(not(debug_assertions))]
+    {
+        info!("Starting Lambda runtime");
+        run(app).await?;
     }
 
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use actix_web::{http::header, test, web::Bytes, App};
-
-    #[actix_web::test]
-    async fn test_missing_var_error() {
-        let app =
-            test::init_service(App::new().route("/send-message", web::post().to(send_message)))
-                .await;
-        let req = test::TestRequest::post()
-            .uri("/send-message")
-            .insert_header(header::ContentType::json())
-            .set_payload(
-                r#"{"contact": "Test contact!", "subject": "Test subject!", "body": "Test body!"}"#,
-            )
-            .to_request();
-        let resp = test::call_and_read_body(&app, req).await;
-
-        assert_eq!(resp, Bytes::from_static(br#"{"message":"Error while getting environment variable","error":"environment variable not found"}"#));
-    }
-
-    #[actix_web::test]
-    async fn test_empty_contact_error() {
-        let app =
-            test::init_service(App::new().route("/send-message", web::post().to(send_message)))
-                .await;
-        let req = test::TestRequest::post()
-            .uri("/send-message")
-            .insert_header(header::ContentType::json())
-            .set_payload(r#"{"contact": "", "subject": "Test subject!", "body": "Test body!"}"#)
-            .to_request();
-        let resp = test::call_and_read_body(&app, req).await;
-
-        assert_eq!(
-            resp,
-            Bytes::from_static(
-                br#"{"message":"Contact cannot be empty","error":"Contact cannot be empty"}"#
-            )
-        );
-    }
-
-    #[actix_web::test]
-    async fn test_empty_subject_error() {
-        let app =
-            test::init_service(App::new().route("/send-message", web::post().to(send_message)))
-                .await;
-        let req = test::TestRequest::post()
-            .uri("/send-message")
-            .insert_header(header::ContentType::json())
-            .set_payload(r#"{"contact": "Test contact!", "subject": "", "body": "Test body!"}"#)
-            .to_request();
-        let resp = test::call_and_read_body(&app, req).await;
-
-        assert_eq!(
-            resp,
-            Bytes::from_static(
-                br#"{"message":"Subject cannot be empty","error":"Subject cannot be empty"}"#
-            )
-        );
-    }
-
-    #[actix_web::test]
-    async fn test_empty_body_error() {
-        let app =
-            test::init_service(App::new().route("/send-message", web::post().to(send_message)))
-                .await;
-        let req = test::TestRequest::post()
-            .uri("/send-message")
-            .insert_header(header::ContentType::json())
-            .set_payload(r#"{"contact": "Test contact!", "subject": "Test subject!", "body": ""}"#)
-            .to_request();
-        let resp = test::call_and_read_body(&app, req).await;
-
-        assert_eq!(
-            resp,
-            Bytes::from_static(
-                br#"{"message":"Body cannot be empty","error":"Body cannot be empty"}"#
-            )
-        );
-    }
-
-    #[actix_web::test]
-    async fn test_over_max_contact_size() {
-        let app =
-            test::init_service(App::new().route("/send-message", web::post().to(send_message)))
-                .await;
-        let req = test::TestRequest::post()
-            .uri("/send-message")
-            .insert_header(header::ContentType::json())
-            .set_payload(
-                r#"{"contact": "123456789012345678901234567890123456789012345678901", "subject": "Test subject!", "body": "Test body!"}"#,
-            )
-            .to_request();
-        let resp = test::call_and_read_body(&app, req).await;
-
-        assert_eq!(
-            resp,
-            Bytes::from_static(br#"{"message":"Contact cannot be longer than 50 characters","error":"Contact cannot be longer than 50 characters"}"#)
-        );
-    }
-
-    #[actix_web::test]
-    async fn test_over_max_subject_size() {
-        let app =
-            test::init_service(App::new().route("/send-message", web::post().to(send_message)))
-                .await;
-        let req = test::TestRequest::post()
-            .uri("/send-message")
-            .insert_header(header::ContentType::json())
-            .set_payload(
-                r#"{"contact": "Test contact!", "subject": "123456789012345678901234567890123456789012345678901", "body": "Test body!"}"#,
-            )
-            .to_request();
-        let resp = test::call_and_read_body(&app, req).await;
-
-        assert_eq!(
-            resp,
-            Bytes::from_static(br#"{"message":"Subject cannot be longer than 50 characters","error":"Subject cannot be longer than 50 characters"}"#)
-        );
-    }
 }

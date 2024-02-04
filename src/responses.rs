@@ -1,44 +1,42 @@
-use actix_web::{
-    error,
-    http::{header::ContentType, StatusCode},
-    HttpResponse,
-};
+use axum::{http::StatusCode, response::IntoResponse, Json};
+use sendgrid_thin::SendgridError;
 use serde::{Deserialize, Serialize};
 use std::{env::VarError, fmt};
+use tracing::{error, info};
 
 #[derive(Debug, Serialize)]
 #[serde(untagged)]
-pub enum UserError {
+pub enum ApiError {
     BadRequest { message: String, error: String },
 
     InternalServerError { message: String, error: String },
 }
 
-impl UserError {
-    // pub fn bad_request<T, U>(message: T, error: U) -> Self
-    // where
-    //     T: Into<String>,
-    //     U: Into<String>,
-    // {
-    //     UserError::BadRequest {
-    //         message: message.into(),
-    //         error: error.into(),
-    //     }
-    // }
+impl ApiError {
+    pub fn bad_request<T, U>(message: T, error: U) -> Self
+    where
+        T: Into<String>,
+        U: Into<String>,
+    {
+        ApiError::BadRequest {
+            message: message.into(),
+            error: error.into(),
+        }
+    }
 
     pub fn internal_server_error<T, U>(message: T, error: U) -> Self
     where
         T: Into<String>,
         U: Into<String>,
     {
-        UserError::InternalServerError {
+        ApiError::InternalServerError {
             message: message.into(),
             error: error.into(),
         }
     }
 }
 
-impl fmt::Display for UserError {
+impl fmt::Display for ApiError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -48,45 +46,46 @@ impl fmt::Display for UserError {
     }
 }
 
-impl std::error::Error for UserError {}
+impl std::error::Error for ApiError {}
 
-impl From<VarError> for UserError {
+impl From<VarError> for ApiError {
     fn from(error: VarError) -> Self {
-        UserError::InternalServerError {
-            message: String::from("Error while getting environment variable"),
-            error: error.to_string(),
-        }
+        ApiError::internal_server_error(
+            "Error while getting environment variable",
+            error.to_string(),
+        )
     }
 }
 
-impl From<&str> for UserError {
+impl From<&str> for ApiError {
     fn from(error: &str) -> Self {
-        UserError::BadRequest {
-            message: String::from(error),
-            error: String::from(error),
-        }
+        ApiError::bad_request(String::from(error), String::from(error))
     }
 }
 
-impl From<reqwest::Error> for UserError {
+impl From<reqwest::Error> for ApiError {
     fn from(error: reqwest::Error) -> Self {
-        UserError::InternalServerError {
-            message: String::from("Request error"),
-            error: error.to_string(),
-        }
+        ApiError::internal_server_error("Request error", error.to_string())
     }
 }
 
-impl error::ResponseError for UserError {
-    fn error_response(&self) -> HttpResponse {
-        HttpResponse::build(self.status_code())
-            .insert_header(ContentType::json())
-            .body(self.to_string())
+impl From<SendgridError> for ApiError {
+    fn from(error: SendgridError) -> Self {
+        ApiError::internal_server_error("Error with email", error.to_string())
     }
-    fn status_code(&self) -> StatusCode {
-        match *self {
-            UserError::BadRequest { .. } => StatusCode::BAD_REQUEST,
-            UserError::InternalServerError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+}
+
+impl IntoResponse for ApiError {
+    fn into_response(self) -> axum::response::Response {
+        match self {
+            ApiError::InternalServerError { .. } => {
+                error!("{}", self);
+                (StatusCode::INTERNAL_SERVER_ERROR).into_response()
+            }
+            ApiError::BadRequest { .. } => {
+                error!("{}", self);
+                (StatusCode::BAD_REQUEST, Json(self)).into_response()
+            }
         }
     }
 }
@@ -97,12 +96,14 @@ pub struct EmailSentResponse {
 }
 
 impl EmailSentResponse {
-    pub fn ok<T>(message: T) -> HttpResponse
-    where
-        T: Into<String>,
-    {
-        HttpResponse::Ok().json(EmailSentResponse {
-            message: message.into(),
-        })
+    pub fn new(message: String) -> Self {
+        EmailSentResponse { message }
+    }
+}
+
+impl IntoResponse for EmailSentResponse {
+    fn into_response(self) -> axum::response::Response {
+        info!("Email sent successfully: {}", self.message);
+        (StatusCode::OK, Json(self)).into_response()
     }
 }
