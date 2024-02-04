@@ -4,7 +4,6 @@ mod utils;
 
 use axum::{
     http::{header, Method},
-    response::IntoResponse,
     routing::{get, post},
     Json, Router,
 };
@@ -36,7 +35,7 @@ use crate::{
 
 const REQUEST_TIMEOUT_SEC: u64 = 5;
 
-async fn send_message(Json(req_body): Json<EmailBody>) -> Result<impl IntoResponse, ApiError> {
+async fn send_message(Json(req_body): Json<EmailBody>) -> Result<EmailSentResponse, ApiError> {
     utils::validate_body(&req_body)?;
 
     let sendgrid_api_key = config().get_sendgrid_api_key();
@@ -72,12 +71,7 @@ async fn send_message(Json(req_body): Json<EmailBody>) -> Result<impl IntoRespon
         ))?
     );
 
-    info!(
-        "Message sent with subject: {} | Data: {}",
-        req_body.subject, &sent_response
-    );
-
-    Ok(EmailSentResponse::ok(sent_response))
+    Ok(EmailSentResponse::new(sent_response))
 }
 
 #[tokio::main]
@@ -93,7 +87,7 @@ async fn main() -> Result<(), Error> {
     set_var("AWS_LAMBDA_HTTP_IGNORE_STAGE_IN_PATH", "true");
 
     tracing_subscriber::registry()
-        .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("debug")))
+        .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
         .with(fmt::layer().with_target(false).with_ansi(false))
         .init();
 
