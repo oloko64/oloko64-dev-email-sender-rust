@@ -92,13 +92,12 @@ async fn main() -> Result<(), Error> {
     // i.e with: `GET /test-stage/todo/id/123` without: `GET /todo/id/123`
     set_var("AWS_LAMBDA_HTTP_IGNORE_STAGE_IN_PATH", "true");
 
-    info!("App version: v{}", env!("CARGO_PKG_VERSION"));
-
     tracing_subscriber::registry()
         .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
-        .with(fmt::layer().with_target(false))
-        .with(fmt::layer().with_ansi(false))
+        .with(fmt::layer().with_target(false).with_ansi(false))
         .init();
+
+    info!("App version: v{}", env!("CARGO_PKG_VERSION"));
 
     let sentry_api_key = env::var("SENTRY_API_KEY").unwrap_or_else(|_| {
         warn!("Sentry API Key not found, not reporting errors to Sentry");
@@ -133,13 +132,17 @@ async fn main() -> Result<(), Error> {
     {
         let socket_addr = get_socket_addr();
         let tcp_listener = tokio::net::TcpListener::bind(&socket_addr).await.unwrap();
+        info!("Listening on {}", socket_addr);
         axum::serve(tcp_listener, app.into_make_service())
             .await
             .unwrap();
     }
 
     #[cfg(not(debug_assertions))]
-    run(app).await?;
+    {
+        info!("Starting Lambda runtime");
+        run(app).await?;
+    }
 
     Ok(())
 }
