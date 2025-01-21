@@ -1,6 +1,6 @@
 [package]
 name = "email-sender-rust"
-version = "0.3.100"
+version = "0.3.200"
 edition = "2021"
 rust-version = "1.72.0"
 
@@ -14,7 +14,7 @@ strip = true
 # This openssl with "vendored" is necessary because the default OpenSSL library is not built for the target architecture (x86_64-unknown-linux-musl)
 openssl = { version = "0.10.68", features = ["vendored"] }
 dotenvy = "0.15.7"
-sendgrid_thin = { version = "0.4.5", default-features = false }
+sendgrid_thin = { version = "0.5.100", default-features = false }
 sentry = "0.36.0"
 serde = { version = "1.0.217", features = ["derive"] }
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
