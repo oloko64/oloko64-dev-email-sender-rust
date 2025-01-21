@@ -37,14 +37,20 @@ pub async fn send_message(Json(req_body): Json<EmailBody>) -> Result<EmailSentRe
         sendgrid.send()
     );
 
-    let sent_response = format!(
-        "Email response -> {} | Telegram response -> {}",
-        email_response.unwrap_or(String::from("Error while sending email")),
-        telegram_response.map_err(|_| ApiError::internal_server_error(
-            "Error while sending Telegram notification",
-            "Something went wrong while sending Telegram notification"
-        ))?
-    );
+    let email_response_text = match email_response {
+        Ok(response) => response.public_response,
+        Err(_) => String::from("Error while sending email"),
+    };
 
-    Ok(EmailSentResponse::new(sent_response))
+    let telegram_response = telegram_response.map_err(|_| {
+        ApiError::internal_server_error(
+            "Error while sending Telegram notification",
+            "Something went wrong while sending Telegram notification",
+        )
+    })?;
+
+    Ok(EmailSentResponse {
+        email_message: email_response_text,
+        telegram_message: telegram_response,
+    })
 }
