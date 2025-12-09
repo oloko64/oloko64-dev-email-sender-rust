@@ -39,10 +39,7 @@ pub async fn send_message(Json(req_body): Json<EmailBody>) -> Result<EmailSentRe
     );
 
     let email_response = match email_response {
-        Ok(response) => format!(
-            "Email sent successfully with status code: {}",
-            response.public_response
-        ),
+        Ok(response) => response.api_response,
         Err(e) => {
             error!("Error while sending email: {}", e);
             String::from("Error while sending email")
