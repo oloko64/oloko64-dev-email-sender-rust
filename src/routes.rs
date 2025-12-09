@@ -39,7 +39,7 @@ pub async fn send_message(Json(req_body): Json<EmailBody>) -> Result<EmailSentRe
     );
 
     let email_response = match email_response {
-        Ok(response) => response.api_response,
+        Ok(response) => response.public_response,
         Err(e) => {
             error!("Error while sending email: {}", e);
             String::from("Error while sending email")
