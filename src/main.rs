@@ -35,7 +35,9 @@ async fn main() -> Result<(), Error> {
     // This variable only applies to API Gateway stages,
     // you can remove it if you don't use them.
     // i.e with: `GET /test-stage/todo/id/123` without: `GET /todo/id/123`
-    set_var("AWS_LAMBDA_HTTP_IGNORE_STAGE_IN_PATH", "true");
+    unsafe {
+        set_var("AWS_LAMBDA_HTTP_IGNORE_STAGE_IN_PATH", "true");
+    }
 
     tracing_subscriber::registry()
         .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
