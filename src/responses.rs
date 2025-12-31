@@ -80,7 +80,7 @@ impl IntoResponse for ApiError {
         match self {
             ApiError::InternalServerError { .. } => {
                 error!("{}", self);
-                (StatusCode::INTERNAL_SERVER_ERROR).into_response()
+                (StatusCode::INTERNAL_SERVER_ERROR, Json(self)).into_response()
             }
             ApiError::BadRequest { .. } => {
                 error!("{}", self);

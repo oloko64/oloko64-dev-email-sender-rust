@@ -2,7 +2,6 @@ use std::time::Duration;
 
 use axum::Json;
 use sendgrid_thin::Sendgrid;
-use tracing::error;
 
 use crate::{
     responses::{ApiError, EmailSentResponse},
@@ -37,17 +36,31 @@ pub async fn send_message(Json(req_body): Json<EmailBody>) -> Result<EmailSentRe
         Telegram::send_notification(&req_body.subject, message_body),
         sendgrid.send()
     );
+
+    let mut errors = vec![];
+
     let email_response_text = match email_response {
         Ok(response) => response.public_response,
-        Err(_) => String::from("Error while sending email"),
+        Err(_) => {
+            errors.push("Error while sending email");
+            String::from("Error while sending email")
+        }
     };
 
-    let telegram_response = telegram_response.map_err(|_| {
-        ApiError::internal_server_error(
-            "Error while sending Telegram notification",
-            "Something went wrong while sending Telegram notification",
-        )
-    })?;
+    let telegram_response = match telegram_response {
+        Ok(response) => response,
+        Err(_) => {
+            errors.push("Error while sending Telegram notification");
+            String::from("Error while sending Telegram notification")
+        }
+    };
+
+    if errors.len() == 2 {
+        return Err(ApiError::internal_server_error(
+            "Both email and Telegram notification failed".to_string(),
+            errors.join("; "),
+        ));
+    }
 
     Ok(EmailSentResponse {
         email_message: email_response_text,
