@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use axum::Json;
 use sendgrid_thin::Sendgrid;
+use tracing::error;
 
 use crate::{
     responses::{ApiError, EmailSentResponse},
@@ -36,7 +37,6 @@ pub async fn send_message(Json(req_body): Json<EmailBody>) -> Result<EmailSentRe
         Telegram::send_notification(&req_body.subject, message_body),
         sendgrid.send()
     );
-
     let email_response_text = match email_response {
         Ok(response) => response.public_response,
         Err(_) => String::from("Error while sending email"),
