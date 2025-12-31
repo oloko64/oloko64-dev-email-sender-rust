@@ -6,11 +6,12 @@ mod utils;
 use axum::{
     http::{header, HeaderValue, Method},
     routing::{get, post},
-    Router,
+    Json, Router,
 };
 use dotenvy::dotenv;
 use lambda_http::Error;
 use lambda_runtime::tower::ServiceBuilder;
+use serde_json::json;
 use std::env::{self, set_var};
 use tower_http::{
     catch_panic::CatchPanicLayer, cors::CorsLayer, normalize_path::NormalizePathLayer,
@@ -73,6 +74,13 @@ async fn main() -> Result<(), Error> {
     let app = Router::new()
         .route("/", get(|| async { "Email sender" }))
         .route("/send-message", post(routes::send_message))
+        .route(
+            "/health",
+            get(|| async {
+                const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
+                Json(json!({ "status": "ok", "version": APP_VERSION }))
+            }),
+        )
         .layer(middlewares);
 
     #[cfg(debug_assertions)]
