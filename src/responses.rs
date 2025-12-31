@@ -2,7 +2,7 @@ use axum::{http::StatusCode, response::IntoResponse, Json};
 use sendgrid_thin::SendgridError;
 use serde::{Deserialize, Serialize};
 use std::{env::VarError, fmt};
-use tracing::{error, info};
+use tracing::error;
 
 #[derive(Debug, Serialize)]
 #[serde(untagged)]
@@ -80,7 +80,7 @@ impl IntoResponse for ApiError {
         match self {
             ApiError::InternalServerError { .. } => {
                 error!("{}", self);
-                (StatusCode::INTERNAL_SERVER_ERROR).into_response()
+                (StatusCode::INTERNAL_SERVER_ERROR, Json(self)).into_response()
             }
             ApiError::BadRequest { .. } => {
                 error!("{}", self);
@@ -92,18 +92,12 @@ impl IntoResponse for ApiError {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct EmailSentResponse {
-    message: String,
-}
-
-impl EmailSentResponse {
-    pub fn new(message: String) -> Self {
-        EmailSentResponse { message }
-    }
+    pub email_message: String,
+    pub telegram_message: String,
 }
 
 impl IntoResponse for EmailSentResponse {
     fn into_response(self) -> axum::response::Response {
-        info!("Email sent successfully: {}", self.message);
         (StatusCode::OK, Json(self)).into_response()
     }
 }
