@@ -1,6 +1,6 @@
 [package]
 name = "email-sender-rust"
-version = "0.3.210"
+version = "0.3.220"
 edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
