@@ -4,21 +4,23 @@ mod telegram;
 mod utils;
 
 use axum::{
-    http::{header, HeaderValue, Method},
-    routing::{get, post},
     Json, Router,
+    http::{HeaderValue, Method, header},
+    routing::{get, post},
 };
-use dotenvy::dotenv;
 use lambda_http::Error;
 use lambda_runtime::tower::ServiceBuilder;
 use serde_json::json;
-use std::env::{self, set_var};
+use std::{
+    env::{self, set_var},
+    time,
+};
 use tower_http::{
     catch_panic::CatchPanicLayer, cors::CorsLayer, normalize_path::NormalizePathLayer,
     trace::TraceLayer,
 };
 use tracing::{info, warn};
-use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 use utils::get_socket_addr;
 
 #[cfg(not(debug_assertions))]
@@ -26,9 +28,8 @@ use lambda_http::run;
 
 const REQUEST_TIMEOUT_SEC: u64 = 5;
 
-#[tokio::main]
-async fn main() -> Result<(), Error> {
-    dotenv().ok();
+fn main() -> Result<(), Error> {
+    dotenvy::dotenv().ok();
 
     // If you use API Gateway stages, the Rust Runtime will include the stage name
     // as part of the path that your application receives.
@@ -40,6 +41,11 @@ async fn main() -> Result<(), Error> {
         set_var("AWS_LAMBDA_HTTP_IGNORE_STAGE_IN_PATH", "true");
     }
 
+    run_runtime()
+}
+
+#[tokio::main]
+async fn run_runtime() -> Result<(), Error> {
     tracing_subscriber::registry()
         .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
         .with(fmt::layer().with_target(false).with_ansi(false))
@@ -71,16 +77,15 @@ async fn main() -> Result<(), Error> {
         .layer(CatchPanicLayer::new())
         .layer(NormalizePathLayer::trim_trailing_slash());
 
+    // API v1 routes
+    let routes_v1 = Router::new()
+        .route("/send-message", post(routes::send_message))
+        .route("/health", get(health_check));
+
     let app = Router::new()
         .route("/", get(|| async { "Email sender" }))
-        .route("/send-message", post(routes::send_message))
-        .route(
-            "/health",
-            get(|| async {
-                const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
-                Json(json!({ "status": "ok", "version": APP_VERSION }))
-            }),
-        )
+        .nest("/v1", routes_v1)
+        .route("/health", get(health_check))
         .layer(middlewares);
 
     #[cfg(debug_assertions)]
@@ -100,4 +105,14 @@ async fn main() -> Result<(), Error> {
     }
 
     Ok(())
+}
+
+async fn health_check() -> Json<serde_json::Value> {
+    const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
+    let server_time = time::SystemTime::now()
+        .duration_since(time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis();
+
+    Json(json!({ "status": "ok", "version": APP_VERSION, "timestamp": server_time }))
 }
