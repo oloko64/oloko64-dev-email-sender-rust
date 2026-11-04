@@ -1,6 +1,20 @@
+use std::{sync::OnceLock, time::Duration};
+
 use serde_json::json;
 
-use crate::{responses::ApiError, utils::config, REQUEST_TIMEOUT_SEC};
+use crate::{REQUEST_TIMEOUT_SEC, responses::ApiError, utils::config};
+
+/// Shared client so connections are reused across requests (and warm Lambda invocations).
+fn http_client() -> &'static reqwest::Client {
+    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+
+    CLIENT.get_or_init(|| {
+        reqwest::Client::builder()
+            .timeout(Duration::from_secs(REQUEST_TIMEOUT_SEC))
+            .build()
+            .expect("Failed to build HTTP client")
+    })
+}
 
 pub struct Telegram;
 
@@ -13,16 +27,12 @@ impl Telegram {
         let bot_token = config().get_telegram_bot_token();
         let chat_id = config().get_telegram_chat_id();
 
-        let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(REQUEST_TIMEOUT_SEC))
-            .build()?;
-
         let body = json!({
             "chat_id": chat_id,
             "text": format!("Subject: {}\n\n{}", subject.as_ref(), message.as_ref()),
         });
 
-        let response = client
+        let response = http_client()
             .post(format!(
                 "https://api.telegram.org/bot{bot_token}/sendMessage"
             ))
@@ -30,12 +40,10 @@ impl Telegram {
             .send()
             .await?;
 
-        if !response.status().is_success() {
+        let status = response.status();
+        if !status.is_success() {
             return Err(ApiError::internal_server_error(
-                format!(
-                    "Error sending Telegram notification, request status {}",
-                    response.status()
-                ),
+                format!("Error sending Telegram notification, request status {status}"),
                 response.text().await?,
             ));
         }

@@ -1,9 +1,5 @@
 use serde::Deserialize;
-use std::{
-    env::{self, VarError},
-    net::SocketAddr,
-    sync::OnceLock,
-};
+use std::{env, net::SocketAddr, sync::OnceLock};
 use tracing::warn;
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -16,14 +12,20 @@ pub struct EmailBody {
     pub body: String,
 }
 
-pub fn config() -> &'static Config {
-    static INSTANCE: OnceLock<Config> = OnceLock::new();
+static CONFIG: OnceLock<Config> = OnceLock::new();
 
-    INSTANCE.get_or_init(|| {
-        Config::load_from_env().unwrap_or_else(|err| {
-            panic!("Error while loading config from environment variables: {err}")
-        })
-    })
+/// Loads the config from the environment. Must be called once at startup, before serving requests.
+pub fn init_config() -> Result<(), String> {
+    let config = Config::load_from_env()?;
+    CONFIG
+        .set(config)
+        .map_err(|_| String::from("Config was already initialized"))
+}
+
+pub fn config() -> &'static Config {
+    CONFIG
+        .get()
+        .expect("Config not initialized, call `init_config` at startup")
 }
 
 pub struct Config {
@@ -34,14 +36,18 @@ pub struct Config {
     send_to_email: String,
 }
 
+fn required_var(name: &str) -> Result<String, String> {
+    env::var(name).map_err(|err| format!("Environment variable `{name}`: {err}"))
+}
+
 impl Config {
-    fn load_from_env() -> Result<Config, VarError> {
+    fn load_from_env() -> Result<Config, String> {
         Ok(Config {
-            telegram_bot_token: env::var("TELEGRAM_BOT_TOKEN")?,
-            telegram_chat_id: env::var("TELEGRAM_CHAT_ID")?,
-            sendgrid_api_key: env::var("SENDGRID_API_KEY")?,
-            send_from_email: env::var("SEND_FROM_EMAIL")?,
-            send_to_email: env::var("SEND_TO_EMAIL")?,
+            telegram_bot_token: required_var("TELEGRAM_BOT_TOKEN")?,
+            telegram_chat_id: required_var("TELEGRAM_CHAT_ID")?,
+            sendgrid_api_key: required_var("SENDGRID_API_KEY")?,
+            send_from_email: required_var("SEND_FROM_EMAIL")?,
+            send_to_email: required_var("SEND_TO_EMAIL")?,
         })
     }
 

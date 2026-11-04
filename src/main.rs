@@ -10,6 +10,7 @@ use axum::{
 };
 use lambda_http::Error;
 use lambda_runtime::tower::ServiceBuilder;
+use sentry::integrations::tracing::{BreadcrumbLayer, ErrorLayer};
 use serde_json::json;
 use std::{
     env::{self, set_var},
@@ -20,11 +21,8 @@ use tower_http::{
     trace::TraceLayer,
 };
 use tracing::{info, warn};
-use tracing_subscriber::{EnvFilter, fmt, prelude::*};
+use tracing_subscriber::{EnvFilter, filter::LevelFilter, fmt, prelude::*};
 use utils::get_socket_addr;
-
-#[cfg(not(debug_assertions))]
-use lambda_http::run;
 
 const REQUEST_TIMEOUT_SEC: u64 = 5;
 
@@ -37,6 +35,8 @@ fn main() -> Result<(), Error> {
     // This variable only applies to API Gateway stages,
     // you can remove it if you don't use them.
     // i.e with: `GET /test-stage/todo/id/123` without: `GET /todo/id/123`
+    //
+    // SAFETY: called before the Tokio runtime starts, so no other threads exist yet.
     unsafe {
         set_var("AWS_LAMBDA_HTTP_IGNORE_STAGE_IN_PATH", "true");
     }
@@ -49,6 +49,9 @@ async fn run_runtime() -> Result<(), Error> {
     tracing_subscriber::registry()
         .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
         .with(fmt::layer().with_target(false).with_ansi(false))
+        // Sends `error!` events to Sentry as errors, with `info!`/`warn!` as breadcrumbs.
+        .with(ErrorLayer::new().with_filter(LevelFilter::ERROR))
+        .with(BreadcrumbLayer::new().with_filter(LevelFilter::INFO))
         .init();
 
     info!("App version: v{}", env!("CARGO_PKG_VERSION"));
@@ -61,6 +64,9 @@ async fn run_runtime() -> Result<(), Error> {
     let mut sentry_options = sentry::ClientOptions::new().attach_stacktrace(true);
     sentry_options.release = sentry::release_name!();
     let _guard = sentry::init((sentry_api_key, sentry_options));
+
+    // Fail at startup instead of on the first request if the config is incomplete.
+    utils::init_config()?;
 
     let cors = CorsLayer::new()
         .allow_origin(HeaderValue::from_static("https://www.oloko64.dev"))
@@ -84,20 +90,15 @@ async fn run_runtime() -> Result<(), Error> {
         .route("/health", get(health_check))
         .layer(middlewares);
 
-    #[cfg(debug_assertions)]
-    {
-        let socket_addr = get_socket_addr();
-        let tcp_listener = tokio::net::TcpListener::bind(&socket_addr).await.unwrap();
-        info!("Listening on {}", socket_addr);
-        axum::serve(tcp_listener, app.into_make_service())
-            .await
-            .unwrap();
-    }
-
-    #[cfg(not(debug_assertions))]
-    {
+    // The Lambda runtime always sets this variable, so the same binary works in both environments.
+    if env::var("AWS_LAMBDA_RUNTIME_API").is_ok() {
         info!("Starting Lambda runtime");
-        run(app).await?;
+        lambda_http::run(app).await?;
+    } else {
+        let socket_addr = get_socket_addr();
+        let tcp_listener = tokio::net::TcpListener::bind(&socket_addr).await?;
+        info!("Listening on {socket_addr}");
+        axum::serve(tcp_listener, app).await?;
     }
 
     Ok(())

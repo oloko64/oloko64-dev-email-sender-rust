@@ -1,21 +1,28 @@
 use std::time::Duration;
 
-use axum::Json;
+use axum::{Json, extract::rejection::JsonRejection};
 use sendgrid_thin::Sendgrid;
+use tracing::error;
 
 use crate::{
+    REQUEST_TIMEOUT_SEC,
     responses::{ApiError, EmailSentResponse},
     telegram::Telegram,
-    utils::{self, config, EmailBody},
-    REQUEST_TIMEOUT_SEC,
+    utils::{self, EmailBody, config},
 };
 
-pub async fn send_message(Json(req_body): Json<EmailBody>) -> Result<EmailSentResponse, ApiError> {
+const EMAIL_ERROR: &str = "Error while sending email";
+const TELEGRAM_ERROR: &str = "Error while sending Telegram notification";
+
+pub async fn send_message(
+    req_body: Result<Json<EmailBody>, JsonRejection>,
+) -> Result<EmailSentResponse, ApiError> {
+    let Json(req_body) =
+        req_body.map_err(|err| ApiError::bad_request("Invalid request body", err.body_text()))?;
+
     utils::validate_body(&req_body)?;
 
-    let sendgrid_api_key = config().get_sendgrid_api_key();
-    let from_email = config().get_send_from_email();
-    let to_email = config().get_send_to_email();
+    let config = config();
 
     let message_body = format!(
         "Contact: {}\n\nMessage: {}",
@@ -23,47 +30,46 @@ pub async fn send_message(Json(req_body): Json<EmailBody>) -> Result<EmailSentRe
     );
 
     let sendgrid = Sendgrid::builder(
-        sendgrid_api_key,
-        from_email,
-        [to_email],
+        config.get_sendgrid_api_key(),
+        config.get_send_from_email(),
+        [config.get_send_to_email()],
         &req_body.subject,
         &message_body,
     )
     .set_request_timeout(Duration::from_secs(REQUEST_TIMEOUT_SEC))
-    .build()?;
+    .build()
+    .map_err(|err| {
+        // Log the real error for Sentry, but don't expose it to the client.
+        error!(error = %err, "Error while building email");
+        ApiError::internal_server_error(EMAIL_ERROR, EMAIL_ERROR)
+    })?;
 
     let (telegram_response, email_response) = tokio::join!(
-        Telegram::send_notification(&req_body.subject, message_body),
+        Telegram::send_notification(&req_body.subject, &message_body),
         sendgrid.send()
     );
 
-    let mut errors = vec![];
-
-    let email_response_text = match email_response {
-        Ok(response) => response.public_response,
-        Err(_) => {
-            errors.push("Error while sending email");
-            String::from("Error while sending email")
+    match (email_response, telegram_response) {
+        (Err(email_err), Err(telegram_err)) => {
+            error!(error = %email_err, "{EMAIL_ERROR}");
+            error!(error = %telegram_err, "{TELEGRAM_ERROR}");
+            Err(ApiError::internal_server_error(
+                "Both email and Telegram notification failed",
+                format!("{EMAIL_ERROR}; {TELEGRAM_ERROR}"),
+            ))
         }
-    };
-
-    let telegram_response = match telegram_response {
-        Ok(response) => response,
-        Err(_) => {
-            errors.push("Error while sending Telegram notification");
-            String::from("Error while sending Telegram notification")
-        }
-    };
-
-    if errors.len() == 2 {
-        return Err(ApiError::internal_server_error(
-            "Both email and Telegram notification failed".to_string(),
-            errors.join("; "),
-        ));
+        (email_response, telegram_response) => Ok(EmailSentResponse {
+            email_message: email_response.map_or_else(
+                |err| {
+                    error!(error = %err, "{EMAIL_ERROR}");
+                    String::from(EMAIL_ERROR)
+                },
+                |response| response.public_response,
+            ),
+            telegram_message: telegram_response.unwrap_or_else(|err| {
+                error!(error = %err, "{TELEGRAM_ERROR}");
+                String::from(TELEGRAM_ERROR)
+            }),
+        }),
     }
-
-    Ok(EmailSentResponse {
-        email_message: email_response_text,
-        telegram_message: telegram_response,
-    })
 }
