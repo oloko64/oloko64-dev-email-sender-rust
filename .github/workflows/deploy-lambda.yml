@@ -1,0 +1,80 @@
+name: Deploy Lambda
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  AWS_REGION: us-east-1
+  LAMBDA_FUNCTION_NAME: email-sender-oloko64-dev
+  TARGET: x86_64-unknown-linux-musl
+  BIN_NAME: email-sender-rust
+
+concurrency:
+  group: deploy-lambda
+  cancel-in-progress: false
+
+jobs:
+  tests:
+    uses: ./.github/workflows/rust.yml
+
+  build:
+    needs: tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ env.TARGET }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ env.TARGET }}
+
+      - name: Install cross
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cross
+
+      - name: Build
+        run: cross build --release --target "$TARGET"
+
+      - name: Package
+        run: |
+          cp "target/$TARGET/release/$BIN_NAME" ./bootstrap
+          zip lambda.zip bootstrap
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lambda
+          path: lambda.zip
+          retention-days: 14
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # required for OIDC
+      contents: read
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: lambda
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update function code
+        run: |
+          aws lambda update-function-code \
+            --function-name "$LAMBDA_FUNCTION_NAME" \
+            --zip-file fileb://lambda.zip \
+            --publish \
+            --query '{Version: Version, CodeSha256: CodeSha256}'
+          aws lambda wait function-updated --function-name "$LAMBDA_FUNCTION_NAME"
