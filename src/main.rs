@@ -57,14 +57,10 @@ async fn run_runtime() -> Result<(), Error> {
         warn!("Sentry API Key not found, not reporting errors to Sentry");
         String::new()
     });
-    let _guard = sentry::init((
-        sentry_api_key,
-        sentry::ClientOptions {
-            attach_stacktrace: true,
-            release: sentry::release_name!(),
-            ..Default::default()
-        },
-    ));
+    // `ClientOptions` is `#[non_exhaustive]` since sentry 0.49, so it can't be built with a struct literal.
+    let mut sentry_options = sentry::ClientOptions::new().attach_stacktrace(true);
+    sentry_options.release = sentry::release_name!();
+    let _guard = sentry::init((sentry_api_key, sentry_options));
 
     let cors = CorsLayer::new()
         .allow_origin(HeaderValue::from_static("https://www.oloko64.dev"))
