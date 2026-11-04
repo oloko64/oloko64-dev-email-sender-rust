@@ -1,8 +1,8 @@
-use axum::{http::StatusCode, response::IntoResponse, Json};
+use axum::{Json, http::StatusCode, response::IntoResponse};
 use sendgrid_thin::SendgridError;
 use serde::{Deserialize, Serialize};
-use std::{env::VarError, fmt};
-use tracing::error;
+use std::fmt;
+use tracing::{error, warn};
 
 #[derive(Debug, Serialize)]
 #[serde(untagged)]
@@ -48,15 +48,6 @@ impl fmt::Display for ApiError {
 
 impl std::error::Error for ApiError {}
 
-impl From<VarError> for ApiError {
-    fn from(error: VarError) -> Self {
-        ApiError::internal_server_error(
-            "Error while getting environment variable",
-            error.to_string(),
-        )
-    }
-}
-
 impl From<&str> for ApiError {
     fn from(error: &str) -> Self {
         ApiError::bad_request(String::from(error), String::from(error))
@@ -83,7 +74,8 @@ impl IntoResponse for ApiError {
                 (StatusCode::INTERNAL_SERVER_ERROR, Json(self)).into_response()
             }
             ApiError::BadRequest { .. } => {
-                error!("{}", self);
+                // Client mistakes are not app errors, so keep them out of Sentry.
+                warn!("{}", self);
                 (StatusCode::BAD_REQUEST, Json(self)).into_response()
             }
         }

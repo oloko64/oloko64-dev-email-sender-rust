@@ -1,5 +1,3 @@
-version: '3'
-
 services:
   email-sender-app:
     build:
@@ -8,7 +6,9 @@ services:
     image: oloko64/email-sender-rust
     ports:
       - "8080:8080"
-    environment:
-      - RUST_LOG=info
     env_file:
       - ./.env
+    environment:
+      # Overrides PORT from .env so it matches the exposed port.
+      - PORT=8080
+      - RUST_LOG=info
