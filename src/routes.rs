@@ -1,12 +1,17 @@
 use std::time::Duration;
 
-use axum::{Json, extract::rejection::JsonRejection};
+use axum::{
+    Json,
+    extract::rejection::JsonRejection,
+    response::{IntoResponse, Response},
+};
 use sendgrid_thin::Sendgrid;
-use tracing::error;
+use tracing::{error, warn};
 
 use crate::{
     REQUEST_TIMEOUT_SEC,
     responses::{ApiError, EmailSentResponse},
+    spam::SpamPattern,
     telegram::Telegram,
     utils::{self, EmailBody, config},
 };
@@ -16,7 +21,7 @@ const TELEGRAM_ERROR: &str = "Error while sending Telegram notification";
 
 pub async fn send_message(
     req_body: Result<Json<EmailBody>, JsonRejection>,
-) -> Result<EmailSentResponse, ApiError> {
+) -> Result<Response, ApiError> {
     let Json(req_body) =
         req_body.map_err(|err| ApiError::bad_request("Invalid request body", err.body_text()))?;
 
@@ -28,6 +33,20 @@ pub async fn send_message(
         "Contact: {}\n\nMessage: {}",
         req_body.contact, req_body.body
     );
+
+    if let Some(pattern) = SpamPattern::detect(&req_body) {
+        // Still notify, but skip the email and make the sender think the API is down.
+        warn!(%pattern, "Spam detected, simulating that the API is down");
+        if let Err(err) = Telegram::send_notification(
+            format!("[SPAM: {pattern}] {}", req_body.subject),
+            &message_body,
+        )
+        .await
+        {
+            error!(error = %err, "{TELEGRAM_ERROR}");
+        }
+        return Ok(pattern.fake_response());
+    }
 
     let sendgrid = Sendgrid::builder(
         config.get_sendgrid_api_key(),
@@ -70,6 +89,7 @@ pub async fn send_message(
                 error!(error = %err, "{TELEGRAM_ERROR}");
                 String::from(TELEGRAM_ERROR)
             }),
-        }),
+        }
+        .into_response()),
     }
 }
