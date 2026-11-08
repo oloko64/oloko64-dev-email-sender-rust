@@ -1,11 +1,14 @@
+mod request_log;
 mod responses;
 mod routes;
+mod spam;
 mod telegram;
 mod utils;
 
 use axum::{
     Json, Router,
     http::{HeaderValue, Method, header},
+    middleware::from_fn,
     routing::{get, post},
 };
 use lambda_http::Error;
@@ -76,6 +79,8 @@ async fn run_runtime() -> Result<(), Error> {
     let middlewares = ServiceBuilder::new()
         .layer(TraceLayer::new_for_http())
         .layer(cors)
+        // After CORS so preflight requests aren't logged; before CatchPanic so panics are logged as 500.
+        .layer(from_fn(request_log::request_logger))
         .layer(CatchPanicLayer::new())
         .layer(NormalizePathLayer::trim_trailing_slash());
 

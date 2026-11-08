@@ -24,12 +24,25 @@ impl Telegram {
         T: AsRef<str>,
         U: AsRef<str>,
     {
+        Self::send_text(format!(
+            "Subject: {}\n\n{}",
+            subject.as_ref(),
+            message.as_ref()
+        ))
+        .await
+    }
+
+    /// Sends `text` as a plain-text message (no `parse_mode`, so nothing needs escaping).
+    pub async fn send_text<T>(text: T) -> Result<String, ApiError>
+    where
+        T: AsRef<str>,
+    {
         let bot_token = config().get_telegram_bot_token();
         let chat_id = config().get_telegram_chat_id();
 
         let body = json!({
             "chat_id": chat_id,
-            "text": format!("Subject: {}\n\n{}", subject.as_ref(), message.as_ref()),
+            "text": text.as_ref(),
         });
 
         let response = http_client()
