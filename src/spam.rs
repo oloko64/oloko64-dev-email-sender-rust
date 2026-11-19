@@ -24,22 +24,40 @@ static LETTERS_ONLY: LazyLock<Regex> =
 /// Keeps ordinary single words like `Collaboration` from matching.
 const MIN_INNER_UPPERCASE: usize = 3;
 
+/// Domain used by GrowGanic (AI SEO blog-writing SaaS) for contact-form outreach.
+const GROWGANIC_DOMAIN: &str = "growganic.io";
+
 /// Known spam patterns. When a request matches one, the API pretends to be down.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SpamPattern {
     /// Random mixed-case letters as subject and body, sent from a dotted Gmail address.
     RandomGmailGibberish,
+    /// Outreach from GrowGanic (AI SEO blog tool), sent from a `growganic.io` address.
+    GrowGanicOutreach,
 }
 
 impl SpamPattern {
-    const ALL: &[SpamPattern] = &[SpamPattern::RandomGmailGibberish];
+    const ALL: &[SpamPattern] = &[
+        SpamPattern::RandomGmailGibberish,
+        SpamPattern::GrowGanicOutreach,
+    ];
 
-    /// Returns the first pattern the body matches, if any.
+    /// Returns the first enabled pattern the body matches, if any.
     pub fn detect(body: &EmailBody) -> Option<Self> {
         Self::ALL
             .iter()
             .copied()
+            .filter(|pattern| pattern.enabled())
             .find(|pattern| pattern.matches(body))
+    }
+
+    /// Whether the pattern is active. Disabled patterns are skipped by `detect`.
+    const fn enabled(self) -> bool {
+        match self {
+            SpamPattern::RandomGmailGibberish => true,
+            // Ready to use, but off for now. Set to `true` if they keep sending messages.
+            SpamPattern::GrowGanicOutreach => false,
+        }
     }
 
     fn matches(self, body: &EmailBody) -> bool {
@@ -49,13 +67,14 @@ impl SpamPattern {
                     && is_random_letters(&body.subject)
                     && is_random_letters(&body.body)
             }
+            SpamPattern::GrowGanicOutreach => is_from_domain(&body.contact, GROWGANIC_DOMAIN),
         }
     }
 
     /// The response sent to the client: looks like the API Gateway reply when the backend is down.
     pub fn fake_response(self) -> Response {
         match self {
-            SpamPattern::RandomGmailGibberish => (
+            SpamPattern::RandomGmailGibberish | SpamPattern::GrowGanicOutreach => (
                 StatusCode::SERVICE_UNAVAILABLE,
                 Json(json!({ "message": "Service Unavailable" })),
             )
@@ -78,6 +97,18 @@ fn is_random_letters(text: &str) -> bool {
             .filter(char::is_ascii_uppercase)
             .count()
             >= MIN_INNER_UPPERCASE
+}
+
+/// True if `contact` is an email address at `domain` or one of its subdomains.
+fn is_from_domain(contact: &str, domain: &str) -> bool {
+    let Some((_, contact_domain)) = contact.trim().rsplit_once('@') else {
+        return false;
+    };
+    let contact_domain = contact_domain.to_ascii_lowercase();
+    contact_domain == domain
+        || contact_domain
+            .strip_suffix(domain)
+            .is_some_and(|prefix| prefix.ends_with('.'))
 }
 
 #[cfg(test)]
@@ -155,6 +186,48 @@ mod tests {
     fn ignores_single_ordinary_words() {
         let b = body("a.b.c@gmail.com", "Collaboration", "Congratulations");
         assert_eq!(SpamPattern::detect(&b), None);
+    }
+
+    #[test]
+    fn growganic_matches_its_domain() {
+        for contact in [
+            "hey@growganic.io",
+            "  Hey@GrowGanic.IO ",
+            "luca@mail.growganic.io",
+        ] {
+            assert!(
+                SpamPattern::GrowGanicOutreach.matches(&body(contact, "Hi", "Hello")),
+                "{contact} should match"
+            );
+        }
+    }
+
+    #[test]
+    fn growganic_ignores_look_alikes() {
+        for contact in [
+            "x@notgrowganic.io",
+            "growganic.io@gmail.com",
+            "x@growganic.io.evil.com",
+            "growganic.io",
+        ] {
+            assert!(
+                !SpamPattern::GrowGanicOutreach.matches(&body(contact, "Hi", "Hello")),
+                "{contact} should not match"
+            );
+        }
+    }
+
+    #[test]
+    fn detect_follows_enabled_flag() {
+        let b = body(
+            "hey@growganic.io",
+            "Question about your blog",
+            "Hi, quick question: who looks after the blog?",
+        );
+        let expected = SpamPattern::GrowGanicOutreach
+            .enabled()
+            .then_some(SpamPattern::GrowGanicOutreach);
+        assert_eq!(SpamPattern::detect(&b), expected);
     }
 
     #[test]
